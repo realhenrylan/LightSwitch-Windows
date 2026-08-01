@@ -74,9 +74,11 @@ void MainWindow::RefreshUI() {
     SendMessageW(m_hScheduleMode,CB_SETCURSEL,idx,0);
     SendMessageW(m_hChangeSystem,BM_SETCHECK,c.changeSystem?BST_CHECKED:BST_UNCHECKED,0);
     SendMessageW(m_hChangeApps,BM_SETCHECK,c.changeApps?BST_CHECKED:BST_UNCHECKED,0);
-    MinutesToHM(c.lightTime,buf,_countof(buf)); SetWindowTextW(m_hLightTime,buf);
-    MinutesToHM(c.darkTime,buf,_countof(buf)); SetWindowTextW(m_hDarkTime,buf);
-    SetWindowTextW(m_hLatitude,c.latitude.c_str()); SetWindowTextW(m_hLongitude,c.longitude.c_str());
+    // 仅在编辑框无焦点时更新文本，避免覆盖用户正在输入的内容
+    if (GetFocus() != m_hLightTime) { MinutesToHM(c.lightTime,buf,_countof(buf)); SetWindowTextW(m_hLightTime,buf); }
+    if (GetFocus() != m_hDarkTime) { MinutesToHM(c.darkTime,buf,_countof(buf)); SetWindowTextW(m_hDarkTime,buf); }
+    if (GetFocus() != m_hLatitude) SetWindowTextW(m_hLatitude,c.latitude.c_str());
+    if (GetFocus() != m_hLongitude) SetWindowTextW(m_hLongitude,c.longitude.c_str());
     bool sl = GetCurrentSystemTheme(), al = GetCurrentAppsTheme();
     std::wstring s = L"当前: "; s += sl ? L"☀亮" : L"☾暗"; s += L" 系统="; s += sl ? L"亮":L"暗"; s += L" 应用="; s += al ? L"亮":L"暗";
     s += L" 模式="; s += ToString(c.scheduleMode);
