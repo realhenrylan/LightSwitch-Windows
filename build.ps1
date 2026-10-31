@@ -1,13 +1,18 @@
-﻿#Requires -Version 5.1
+#Requires -Version 5.1
 <#
 .SYNOPSIS
-    Builds, tests and optionally publishes LightSwitch for Windows.
+    Builds, tests and publishes LightSwitch for Windows.
+
+.DESCRIPTION
+    Publishing is self-contained by default: the publish folder includes the
+    Windows App SDK and a private copy of the .NET runtime, so the target
+    machine does not need any runtime installed.
 
 .EXAMPLE
     .\build.ps1
     .\build.ps1 -Test
     .\build.ps1 -Publish
-    .\build.ps1 -Publish -SelfContained
+    .\build.ps1 -Publish -FrameworkDependent
 #>
 [CmdletBinding()]
 param(
@@ -18,7 +23,8 @@ param(
 
     [switch] $Publish,
 
-    [switch] $SelfContained,
+    # Produce a smaller folder that requires the .NET 10 Desktop Runtime.
+    [switch] $FrameworkDependent,
 
     [string] $OutputDirectory
 )
@@ -38,7 +44,7 @@ function Resolve-Dotnet {
     }
 
     $local = Join-Path $env:LOCALAPPDATA 'Microsoft\dotnet10\dotnet.exe'
-    if (Test-Path $local) {
+    if (Test-Path -LiteralPath $local) {
         $candidates += $local
     }
 
@@ -54,7 +60,7 @@ function Resolve-Dotnet {
         }
     }
 
-    throw '未找到 .NET SDK 10。请安装 .NET 10 SDK：https://dotnet.microsoft.com/download/dotnet/10.0'
+    throw 'Cannot find .NET SDK 10. Install it from https://dotnet.microsoft.com/download/dotnet/10.0'
 }
 
 $dotnet = Resolve-Dotnet
@@ -63,18 +69,18 @@ Write-Host "Building LightSwitch ($Configuration) ..." -ForegroundColor Cyan
 
 & $dotnet build (Join-Path $root 'LightSwitch.slnx') -c $Configuration --nologo
 if ($LASTEXITCODE -ne 0) {
-    throw "构建失败（exit $LASTEXITCODE）。"
+    throw "Build failed (exit $LASTEXITCODE)."
 }
 
 $appOutput = Join-Path $root "src\LightSwitch.App\bin\$Configuration\net10.0-windows10.0.19041.0\win-x64"
-Write-Host "应用输出：$appOutput" -ForegroundColor Green
+Write-Host "App output: $appOutput" -ForegroundColor Green
 
 if ($Test) {
     Write-Host 'Running tests ...' -ForegroundColor Cyan
     & $dotnet run --project (Join-Path $root 'tests\LightSwitch.Tests\LightSwitch.Tests.csproj') `
         -c $Configuration --no-build
     if ($LASTEXITCODE -ne 0) {
-        throw "测试失败（exit $LASTEXITCODE）。"
+        throw "Tests failed (exit $LASTEXITCODE)."
     }
 }
 
@@ -86,28 +92,43 @@ if ($Publish) {
         Join-Path $root 'artifacts\LightSwitch-win-x64'
     }
 
-    if (Test-Path $output) {
-        Remove-Item $output -Recurse -Force
+    if (Test-Path -LiteralPath $output) {
+        Remove-Item -LiteralPath $output -Recurse -Force
     }
 
-    Write-Host "Publishing to $output (self-contained=$($SelfContained.IsPresent)) ..." -ForegroundColor Cyan
-    $publishArgs = @(
-        'publish',
-        (Join-Path $root 'src\LightSwitch.App\LightSwitch.App.csproj'),
-        '-c', $Configuration,
-        '-r', 'win-x64',
-        '--self-contained', $(if ($SelfContained) { 'true' } else { 'false' }),
-        '-p:WindowsAppSDKSelfContained=true',
-        '-o', $output
-    )
+    $mode = if ($FrameworkDependent) { 'framework-dependent' } else { 'self-contained' }
+    Write-Host "Publishing to $output ($mode) ..." -ForegroundColor Cyan
 
-    & $dotnet @publishArgs
+    & $dotnet publish (Join-Path $root 'src\LightSwitch.App\LightSwitch.App.csproj') `
+        -c $Configuration `
+        -r win-x64 `
+        --self-contained false `
+        -p:WindowsAppSDKSelfContained=true `
+        -o $output
     if ($LASTEXITCODE -ne 0) {
-        throw "发布失败（exit $LASTEXITCODE）。"
+        throw "Publish failed (exit $LASTEXITCODE)."
     }
 
-    Write-Host "发布完成：$output" -ForegroundColor Green
-    if (-not $SelfContained) {
-        Write-Host '提示：该目录需要目标机器安装 .NET 10 Desktop Runtime。' -ForegroundColor Yellow
+    if (-not $FrameworkDependent) {
+        $bundler = Join-Path $root 'tools\bundle-dotnet-runtime.ps1'
+        if (-not (Test-Path -LiteralPath $bundler)) {
+            throw "Missing bundler: $bundler"
+        }
+        $dotnetRoot = Split-Path -Parent $dotnet
+        & $bundler -PublishDirectory $output -DotnetRoot $dotnetRoot
+        if ($LASTEXITCODE -ne 0) {
+            throw "Bundling .NET failed (exit $LASTEXITCODE)."
+        }
+    }
+
+    $files = Get-ChildItem -LiteralPath $output -Recurse -File
+    $size = ($files | Measure-Object -Property Length -Sum).Sum
+    Write-Host ("Publish complete: {0} files, {1:N1} MB" -f $files.Count, ($size / 1MB)) -ForegroundColor Green
+
+    if ($FrameworkDependent) {
+        Write-Host 'This build requires the .NET 10 Desktop Runtime on the target machine.' -ForegroundColor Yellow
+    }
+    else {
+        Write-Host 'This build is portable: no .NET runtime installation is required.' -ForegroundColor Green
     }
 }

@@ -1,5 +1,19 @@
 # 变更日志
 
+## [v2.0.1] — 2026-11-01
+
+### 📦 默认自包含发布
+
+- **默认发布不再依赖 .NET 运行时** — `build.ps1 -Publish` 生成的 `artifacts\LightSwitch-win-x64` 约 **170 MB / 461 文件**，目标机器无需安装 .NET 10 Desktop Runtime，也无需 Windows App Runtime。
+- **新增 `tools/bundle-dotnet-runtime.ps1`** — 把构建机上的 .NET 10 运行时装入发布目录：复制 `Microsoft.NETCore.App` 共享运行时与 `hostfxr.dll`，将 `runtimeconfig.json` 改为 `includedFrameworks`，并把运行时资产合并进 `deps.json`。不依赖 NuGet runtime pack。
+- **新增 `-FrameworkDependent` 开关** — 仍可生成约 93 MB 的框架依赖版本，适合目标机已装 .NET 10 Desktop Runtime 的场景。
+- **精简 Windows App SDK 依赖** — 应用只引用 `Microsoft.WindowsAppSDK.WinUI` 与 `Microsoft.WindowsAppSDK.Runtime`，不再携带完整 metapackage；应用自身输出从 153 MB 降到约 93 MB。
+- **发布版窗口崩溃修复** — `dotnet publish` 不会复制 XAML 编译产物（`*.xbf`）和资源索引（`*.pri`），导致发布版托盘可启动、创建窗口时崩溃（`Microsoft.UI.Xaml.dll`，`0xc000027b`）。`LightSwitch.App.csproj` 增加 `CopyXamlArtifactsToPublish` target 显式复制。
+- **实测** — 自包含发布在剥离 `DOTNET_ROOT`、PATH 仅保留系统目录的环境下：窗口正常显示（150.8 MB WS），`--startup` 托盘模式 91.6 MB WS / 64.4 MB 私有内存 / 34 线程，关闭到托盘与单实例唤起正常。
+- **文档** — README 的系统要求、快速开始、性能、架构与发布章节已同步；v2.0.0 的“需要 .NET 10 Desktop Runtime”说明由本版本取代。
+
+---
+
 ## [v2.0.0] — 2026-11-01
 
 ### ✨ 新增：浅色 / 深色壁纸分别设置
@@ -38,7 +52,7 @@
 ### ⚠️ 不兼容变更
 
 - **配置目录变更**：从 exe 同目录改为 `%LOCALAPPDATA%\LightSwitch\config.json`（首次启动尝试自动迁移）。
-- **不再单 EXE 零依赖**：默认构建自带 Windows App SDK，但需要 **.NET 10 Desktop Runtime**；可用 `build.ps1 -Publish -SelfContained` 生成自包含版本。
+- **不再单 EXE 零依赖**：v2.0.0 默认构建自带 Windows App SDK，但需要 **.NET 10 Desktop Runtime**；v2.0.1 起默认发布已改为自包含。
 - **外部编辑配置不再热重载**：v1 的 `FindFirstChangeNotification` 目录监听未移植；修改 `config.json` 后需重启应用。
 - **壁纸为全局一对**：暂不支持按显示器分别设置、纯色、Spotlight。
 - **旧 C++ 实现归档**：v1.1.0 源码、工程和构建脚本移动到 `legacy/`，不再维护。

@@ -72,15 +72,15 @@
 | 项目 | 要求 |
 |------|------|
 | 操作系统 | Windows 10 1809+ / Windows 11，x64 |
-| 运行时（默认构建） | [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0) |
+| 运行时（默认构建） | **无**；自带 .NET 10 运行时 |
 | 图形 | 支持 WinUI 3 的 Windows 桌面环境 |
 | 权限 | 普通用户即可（HKCU + 当前用户桌面壁纸） |
 
 说明：
 
-- Windows App SDK 已随应用一起分发（`WindowsAppSDKSelfContained=true`），不需要单独安装 Windows App Runtime。
+- Windows App SDK 与 .NET 10 运行时都已随默认发布目录一起分发，目标机器不需要安装 Windows App Runtime 或 .NET Desktop Runtime。
 - Mica 是 Windows 11 特性；在 Windows 10 上会自动回退为纯色背景，其他功能不受影响。
-- 如果想生成**不依赖 .NET 运行时**的版本，见[快速开始](#快速开始)中的 self-contained 发布命令。
+- 如果更看重体积、且目标机器已安装 .NET 10 Desktop Runtime，可用 `build.ps1 -Publish -FrameworkDependent` 生成约 93 MB 的框架依赖版本。
 
 ---
 
@@ -103,12 +103,11 @@ cd LightSwitch-Windows
 # 构建并运行 30 个单元测试
 .\build.ps1 -Test
 
-# 发布到 artifacts\LightSwitch-win-x64（需要目标机器安装 .NET 10 Desktop Runtime）
+# 发布到 artifacts\LightSwitch-win-x64（自包含，目标机器无需安装 .NET）
 .\build.ps1 -Publish
 
-# 发布为自包含版本（体积更大，但不需要安装 .NET 运行时）
-# 首次执行需要联网还原 .NET runtime packs
-.\build.ps1 -Publish -SelfContained
+# 可选：更小的框架依赖版本（目标机器需安装 .NET 10 Desktop Runtime）
+.\build.ps1 -Publish -FrameworkDependent
 ```
 
 也可以直接双击 `build.bat`，或使用：
@@ -125,7 +124,7 @@ src\LightSwitch.App\bin\Release\net10.0-windows10.0.19041.0\win-x64\LightSwitch.
 
 > 首次构建需要能访问 NuGet（`nuget.org`）以下载 Windows App SDK 与 SDK BuildTools；之后会走本机缓存。
 >
-> `-Publish -SelfContained` 首次执行还需要下载 .NET 10 的 runtime packs（约数百 MB）。离线环境会报 `NU1301`，此时可先在有网络的环境还原一次，或继续使用默认的框架依赖发布。
+> 默认发布**不需要**下载 .NET runtime packs：`build.ps1` 会把构建机上已安装的 .NET 10 运行时复制进发布目录，并重写 `runtimeconfig.json` / `deps.json`。因此构建机需要 .NET 10 SDK（含对应运行时），目标机则不需要。
 
 ### 从 v1.x 升级
 
@@ -279,10 +278,10 @@ LightSwitch.exe --apply dark       # 应用深色主题+深色壁纸后退出
 
 | 场景 | 工作集（WS） | 私有内存 | 线程 | 说明 |
 |------|--------------|----------|------|------|
-| 托盘静默启动（`--startup`） | **91.1 MB** | 64.1 MB | 33 | 不创建主窗口，10 秒后保持稳定 |
+| 托盘静默启动（`--startup`） | **91.6 MB** | 64.4 MB | 34 | 不创建主窗口，10 秒后保持稳定 |
 | 主窗口打开 | **147–162 MB** | ~101 MB | 67 | 卡片、Mica、壁纸缩略图全部加载后 |
 | 空闲 CPU | **≈ 0%** | — | — | 30 秒定时器 + 事件驱动，无 sleep 轮询 |
-| 构建输出 | 155.3 MB / 336 文件 | — | — | 含 Windows App SDK 运行时文件 |
+| 构建输出（默认自包含） | **170.0 MB / 461 文件** | — | — | 含 Windows App SDK 与 .NET 10 运行时 |
 
 **这是 WinUI 3 应用，内存占用无法回到 v1 的亚 MB 级。** 为了保持“轻量”的使用体验，v2 做了这些取舍：
 
@@ -292,6 +291,7 @@ LightSwitch.exe --apply dark       # 应用深色主题+深色壁纸后退出
 - **壁纸预览限制解码宽度**：`BitmapImage.DecodePixelWidth = 160`，不把原图完整解码进 UI 内存。
 - **无第三方 UI 框架**：只依赖 Windows App SDK / WinUI 3。
 - **日志轮转**：512 KB 自动滚动，避免长期运行写入无限增长。
+- **精简依赖**：应用只引用 `Microsoft.WindowsAppSDK.WinUI` 与 `Microsoft.WindowsAppSDK.Runtime`，不再携带完整 metapackage；应用自身输出从 153 MB 降到约 93 MB。
 
 如果内存是首要指标，v1 的 C++ 实现仍保留在 [`legacy/`](legacy/README.md)，但不再获得新功能。
 
@@ -307,6 +307,8 @@ LightSwitch-Windows/
 ├── Directory.Build.props         # 版本、语言版本等公共属性
 ├── NuGet.config                  # nuget.org 源
 ├── build.ps1 / build.bat         # 构建、测试、发布
+├── tools/
+│   └── bundle-dotnet-runtime.ps1 # 把 .NET 运行时装入发布目录
 ├── config.example.json           # 配置示例
 ├── README.md / CHANGELOG.md / PLAN.md
 ├── LICENSE
@@ -403,6 +405,7 @@ v2 的壁纸行为参考了 [AutoDarkMode / Windows-Auto-Night-Mode](https://git
 - **Mica 仅 Windows 11**；Windows 10 使用纯色背景。
 - **内存基线**：WinUI 3 托盘静默约 91 MB WS，主窗口打开约 147–162 MB；无法达到 v1 的亚 MB 级。
 - **热键固定为 `Ctrl+Alt+Shift+D`**，暂不支持自定义组合键。
+- **自包含发布用构建机的 .NET 运行时手工装配**：构建机需有对应版本的 .NET 10 SDK；发布目录包含该运行时的副本。
 - **界面目前为简体中文**，尚未做多语言资源。
 - **单用户会话**：互斥体在 `Local\`，不支持多用户同时运行同一实例（不同登录会话可以各自运行）。
 
@@ -467,14 +470,22 @@ dotnet build LightSwitch.slnx -c Release
 ### 发布
 
 ```powershell
-# 依赖 .NET 10 Desktop Runtime
+# 默认：自包含，目标机器不需要任何 .NET 运行时
 .\build.ps1 -Publish
 
-# 自包含（不需要 .NET 运行时）
-.\build.ps1 -Publish -SelfContained
+# 可选：框架依赖，体积更小，但目标机器需安装 .NET 10 Desktop Runtime
+.\build.ps1 -Publish -FrameworkDependent
 ```
 
-输出在 `artifacts\LightSwitch-win-x64\`（可用 `-OutputDirectory` 覆盖）。自包含版本会把 .NET 运行时一起打包，体积明显更大。
+输出在 `artifacts\LightSwitch-win-x64\`（可用 `-OutputDirectory` 覆盖）。
+
+自包含发布先由 `dotnet publish` 生成框架依赖目录，再由 `tools/bundle-dotnet-runtime.ps1` 完成三件事：
+
+1. 复制构建机上 `shared\Microsoft.NETCore.App\<version>` 的全部文件；
+2. 复制对应版本的 `hostfxr.dll`；
+3. 把 `runtimeconfig.json` 的 `framework` 改成 `includedFrameworks`，并将运行时资产合并进 `deps.json`。
+
+这样不需要从 NuGet 下载 runtime pack。代价是发布目录约 170 MB / 461 文件；升级 .NET 运行时版本时重新执行即可。
 
 ### 代码约定
 

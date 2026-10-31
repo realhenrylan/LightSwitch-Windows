@@ -24,7 +24,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.6.4" />
+    <PackageReference Include="Microsoft.WindowsAppSDK.WinUI" Version="2.6.4" />
+    <PackageReference Include="Microsoft.WindowsAppSDK.Runtime" Version="2.6.4" />
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.26100.4654" />
   </ItemGroup>
 
@@ -37,5 +38,17 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
   </ItemGroup>
+
+  <!-- dotnet publish omits the XAML compiler output (.xbf) and the resource
+       index (.pri) for unpackaged WinUI 3 apps. Without them the app starts in
+       tray mode but crashes when the first Window is created. Copy them next to
+       the published executable explicitly. -->
+  <Target Name="CopyXamlArtifactsToPublish" AfterTargets="Publish" Condition="'$(PublishDir)' != ''">
+    <ItemGroup>
+      <_XamlPublishArtifact Include="$(TargetDir)*.xbf" />
+      <_XamlPublishArtifact Include="$(TargetDir)$(AssemblyName).pri" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_XamlPublishArtifact)" DestinationFolder="$(PublishDir)" SkipUnchangedFiles="true" />
+  </Target>
 
 </Project>
