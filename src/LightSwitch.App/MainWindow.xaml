@@ -1,0 +1,284 @@
+<Window
+    x:Class="LightSwitch.App.MainWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d"
+    Title="LightSwitch">
+
+    <Grid x:Name="RootGrid" Background="Transparent">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="48" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- Custom title bar -->
+        <Grid x:Name="TitleBarDragRegion" Grid.Row="0" Padding="16,0,148,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                <Border Width="24" Height="24" CornerRadius="6"
+                        Background="{ThemeResource AccentFillColorDefaultBrush}">
+                    <FontIcon Glyph="&#xE706;" FontSize="12" Foreground="White" />
+                </Border>
+                <TextBlock Text="LightSwitch" FontWeight="SemiBold" VerticalAlignment="Center" />
+            </StackPanel>
+
+            <Border Grid.Column="2" Padding="10,4" CornerRadius="12"
+                    Background="{ThemeResource ControlFillColorDefaultBrush}"
+                    VerticalAlignment="Center">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                    <Ellipse x:Name="StatusDot" Width="7" Height="7"
+                             Fill="{ThemeResource SystemFillColorSuccessBrush}" />
+                    <TextBlock x:Name="StatusPillText" Text="自动调度" FontSize="12" />
+                </StackPanel>
+            </Border>
+        </Grid>
+
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+            <StackPanel MaxWidth="920" Padding="28,8,28,40" HorizontalAlignment="Center">
+
+                <InfoBar x:Name="MessageBar" IsOpen="False" Margin="0,0,0,12" IsClosable="True" />
+
+                <!-- Current appearance -->
+                <Border Style="{StaticResource CardBorderStyle}">
+                    <Grid ColumnSpacing="16">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Spacing="6">
+                            <TextBlock Text="当前外观" Style="{StaticResource SettingDescriptionStyle}" />
+                            <StackPanel Orientation="Horizontal" Spacing="12">
+                                <FontIcon x:Name="HeroIcon" Glyph="&#xE708;" FontSize="34"
+                                          Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+                                <StackPanel VerticalAlignment="Center" Spacing="2">
+                                    <TextBlock x:Name="HeroTitle" Text="深色外观"
+                                               Style="{StaticResource TitleTextBlockStyle}" />
+                                    <TextBlock x:Name="HeroSubtitle" Text="自动调度已关闭"
+                                               Style="{StaticResource BodyTextBlockStyle}" />
+                                </StackPanel>
+                            </StackPanel>
+                            <TextBlock x:Name="HeroDetail" Style="{StaticResource SettingDescriptionStyle}" />
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                            <Button Content="浅色" Click="OnLightClick" Style="{StaticResource AccentButtonStyle}" />
+                            <Button Content="深色" Click="OnDarkClick" />
+                            <Button Content="恢复自动" Click="OnRestoreAutoClick" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <!-- Schedule -->
+                <Border Style="{StaticResource CardBorderStyle}">
+                    <StackPanel Spacing="14">
+                        <TextBlock Text="调度" Style="{StaticResource SectionTitleStyle}" />
+
+                        <Grid ColumnSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="150" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="切换方式" Style="{StaticResource SettingLabelStyle}" />
+                            <ComboBox x:Name="ModeCombo" Grid.Column="1" HorizontalAlignment="Stretch"
+                                      SelectionChanged="OnModeChanged">
+                                <ComboBoxItem Content="关闭自动调度" Tag="Off" />
+                                <ComboBoxItem Content="固定时间" Tag="FixedHours" />
+                                <ComboBoxItem Content="日出日落" Tag="SunsetToSunrise" />
+                                <ComboBoxItem Content="跟随 Windows 夜间模式" Tag="FollowNightLight" />
+                            </ComboBox>
+                        </Grid>
+
+                        <Grid ColumnSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="150" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="28" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="浅色时间" Style="{StaticResource SettingLabelStyle}" />
+                            <TimePicker x:Name="LightTimePicker" Grid.Column="1" ClockIdentifier="24HourClock"
+                                        SelectedTimeChanged="OnTimesChanged" />
+                            <TextBlock Grid.Column="3" Text="深色时间" Style="{StaticResource SettingLabelStyle}" />
+                            <TimePicker x:Name="DarkTimePicker" Grid.Column="4" ClockIdentifier="24HourClock"
+                                        HorizontalAlignment="Left" SelectedTimeChanged="OnTimesChanged" />
+                        </Grid>
+
+                        <StackPanel x:Name="LocationPanel" Spacing="10">
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="150" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="24" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="所在位置" Style="{StaticResource SettingLabelStyle}" />
+                                <NumberBox x:Name="LatitudeBox" Grid.Column="1" Header="纬度"
+                                           PlaceholderText="39.9" ValueChanged="OnLocationChanged" />
+                                <NumberBox x:Name="LongitudeBox" Grid.Column="3" Header="经度"
+                                           PlaceholderText="116.4" ValueChanged="OnLocationChanged" />
+                            </Grid>
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="150" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="24" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="微调（分钟）" Style="{StaticResource SettingLabelStyle}" />
+                                <NumberBox x:Name="SunriseOffsetBox" Grid.Column="1" Header="日出偏移"
+                                           ValueChanged="OnLocationChanged" />
+                                <NumberBox x:Name="SunsetOffsetBox" Grid.Column="3" Header="日落偏移"
+                                           ValueChanged="OnLocationChanged" />
+                            </Grid>
+                            <TextBlock x:Name="SunInfoText" Style="{StaticResource SettingDescriptionStyle}" />
+                        </StackPanel>
+
+                        <TextBlock x:Name="NextSwitchText" Style="{StaticResource SettingDescriptionStyle}" />
+                    </StackPanel>
+                </Border>
+
+                <!-- Theme targets -->
+                <Border Style="{StaticResource CardBorderStyle}">
+                    <StackPanel Spacing="10">
+                        <TextBlock Text="应用外观的对象" Style="{StaticResource SectionTitleStyle}" />
+                        <ToggleSwitch x:Name="SystemToggle" Header="Windows 系统外观"
+                                      OnContent="跟随调度" OffContent="不修改" Toggled="OnTargetToggled" />
+                        <ToggleSwitch x:Name="AppsToggle" Header="应用外观（AppsUseLightTheme）"
+                                      OnContent="跟随调度" OffContent="不修改" Toggled="OnTargetToggled" />
+                    </StackPanel>
+                </Border>
+
+                <!-- Wallpaper -->
+                <Border Style="{StaticResource CardBorderStyle}">
+                    <StackPanel Spacing="14">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="壁纸" Style="{StaticResource SectionTitleStyle}" VerticalAlignment="Center" />
+                            <ToggleSwitch x:Name="WallpaperToggle" Grid.Column="1" OnContent="启用"
+                                          OffContent="关闭" Toggled="OnWallpaperToggled" />
+                        </Grid>
+
+                        <Grid ColumnSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="150" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="填充方式" Style="{StaticResource SettingLabelStyle}" />
+                            <ComboBox x:Name="PositionCombo" Grid.Column="1" HorizontalAlignment="Stretch"
+                                      SelectionChanged="OnPositionChanged">
+                                <ComboBoxItem Content="填充 (Fill)" Tag="Fill" />
+                                <ComboBoxItem Content="适应 (Fit)" Tag="Fit" />
+                                <ComboBoxItem Content="拉伸 (Stretch)" Tag="Stretch" />
+                                <ComboBoxItem Content="居中 (Center)" Tag="Center" />
+                                <ComboBoxItem Content="平铺 (Tile)" Tag="Tile" />
+                                <ComboBoxItem Content="跨屏 (Span)" Tag="Span" />
+                            </ComboBox>
+                        </Grid>
+
+                        <Border Style="{StaticResource FieldSeparatorStyle}" />
+
+                        <Grid ColumnSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="96" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Border Width="96" Height="54" CornerRadius="4"
+                                    Background="{ThemeResource ControlFillColorDefaultBrush}"
+                                    BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
+                                    BorderThickness="1">
+                                <Image x:Name="LightPreview" Stretch="UniformToFill" />
+                            </Border>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                <TextBlock Text="浅色壁纸" Style="{StaticResource SettingLabelStyle}" />
+                                <TextBlock x:Name="LightWallpaperPath" Text="未选择"
+                                           Style="{StaticResource SettingDescriptionStyle}"
+                                           TextTrimming="CharacterEllipsis" />
+                            </StackPanel>
+                            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6"
+                                        VerticalAlignment="Center">
+                                <Button Content="选择" Click="OnPickLightWallpaper" />
+                                <Button Content="应用" Click="OnApplyLightWallpaper" />
+                                <Button Content="清除" Click="OnClearLightWallpaper" />
+                            </StackPanel>
+                        </Grid>
+
+                        <Grid ColumnSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="96" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Border Width="96" Height="54" CornerRadius="4"
+                                    Background="{ThemeResource ControlFillColorDefaultBrush}"
+                                    BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
+                                    BorderThickness="1">
+                                <Image x:Name="DarkPreview" Stretch="UniformToFill" />
+                            </Border>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                <TextBlock Text="深色壁纸" Style="{StaticResource SettingLabelStyle}" />
+                                <TextBlock x:Name="DarkWallpaperPath" Text="未选择"
+                                           Style="{StaticResource SettingDescriptionStyle}"
+                                           TextTrimming="CharacterEllipsis" />
+                            </StackPanel>
+                            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6"
+                                        VerticalAlignment="Center">
+                                <Button Content="选择" Click="OnPickDarkWallpaper" />
+                                <Button Content="应用" Click="OnApplyDarkWallpaper" />
+                                <Button Content="清除" Click="OnClearDarkWallpaper" />
+                            </StackPanel>
+                        </Grid>
+
+                        <TextBlock Text="切换外观时，LightSwitch 会把对应壁纸应用到每一台显示器；启用开关后无需再手动设置。"
+                                   Style="{StaticResource SettingDescriptionStyle}" />
+                    </StackPanel>
+                </Border>
+
+                <!-- General -->
+                <Border Style="{StaticResource CardBorderStyle}">
+                    <StackPanel Spacing="10">
+                        <TextBlock Text="通用" Style="{StaticResource SectionTitleStyle}" />
+                        <ToggleSwitch x:Name="StartupToggle" Header="开机时自动启动"
+                                      OnContent="启用" OffContent="关闭" Toggled="OnStartupToggled" />
+                        <ToggleSwitch x:Name="CloseToTrayToggle" Header="关闭窗口时最小化到托盘"
+                                      OnContent="启用" OffContent="关闭" Toggled="OnGeneralToggled" />
+                        <ToggleSwitch x:Name="MinimizeToTrayToggle" Header="最小化时隐藏到托盘"
+                                      OnContent="启用" OffContent="关闭" Toggled="OnGeneralToggled" />
+                        <ToggleSwitch x:Name="HotkeyToggle" Header="全局快捷键 Ctrl+Alt+Shift+D"
+                                      OnContent="启用" OffContent="关闭" Toggled="OnHotkeyToggled" />
+
+                        <Border Style="{StaticResource FieldSeparatorStyle}" />
+
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel VerticalAlignment="Center" Spacing="2">
+                                <TextBlock Text="配置文件与日志" Style="{StaticResource SettingLabelStyle}" />
+                                <TextBlock x:Name="DataDirectoryText"
+                                           Style="{StaticResource SettingDescriptionStyle}" />
+                            </StackPanel>
+                            <Button Grid.Column="1" Content="打开数据目录" Click="OnOpenDataFolderClick" />
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <TextBlock x:Name="VersionText" HorizontalAlignment="Center" Margin="0,4,0,0"
+                           Style="{StaticResource SettingDescriptionStyle}" />
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</Window>

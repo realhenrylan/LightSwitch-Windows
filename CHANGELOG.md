@@ -1,5 +1,60 @@
 # 变更日志
 
+## [v2.0.0] — 2026-11-01
+
+### ✨ 新增：浅色 / 深色壁纸分别设置
+
+- **两张壁纸跟随主题切换** — 浅色主题使用 `lightWallpaper`，深色主题使用 `darkWallpaper`；启用后与固定时间、日出日落、跟随 Night Light、手动切换、托盘菜单、全局热键、`--apply light|dark` 全部联动。
+- **应用到所有显示器** — 通过 `IDesktopWallpaper` 逐台显示器调用 `SetWallpaper`，支持显示器热插拔后重新枚举。
+- **六种填充方式** — 填充 `Fill`、适应 `Fit`、拉伸 `Stretch`、居中 `Center`、平铺 `Tile`、跨屏 `Span`。
+- **缩略图预览** — 使用 `BitmapImage.DecodePixelWidth = 160`，不会把原图完整解码进内存。
+- **独立「应用」按钮** — 即使壁纸开关关闭，也可以立即预览某一张壁纸。
+- **路径校验与错误提示** — 文件不存在时不调用 COM，界面 InfoBar 显示错误，日志记录原因。
+- **状态去重** — 通过 `GetWallpaper` 比较每个显示器当前路径，已匹配时不重复写入。
+
+### 🔧 重构：C# + WinUI 3 + Windows App SDK + Fluent Design
+
+- **技术栈** — .NET 10、WinUI 3、Windows App SDK 2.6.4、C#，unpackaged（`WindowsPackageType=None`）。
+- **Fluent 界面** — 卡片布局、Mica 背景（Windows 11）、自定义 48px 标题栏、系统深浅色资源、圆角/描边/状态胶囊。
+- **分层架构** — `LightSwitch.Core`（配置、调度、主题、夜灯、壁纸、日出日落、自启、日志）与 `LightSwitch.App`（WinUI、托盘、CLI）分离，Core 可独立测试。
+- **状态机重写** — 保留 v1 的固定时间、日出日落、跟随夜灯、跨午夜、手动覆盖到下一个边界等语义；状态改为不可变 `EngineState` 快照 + `StateChanged` 事件。
+- **托盘重写** — 隐藏的 Win32 顶层窗口 + `Shell_NotifyIcon` V4 + 原生 `TrackPopupMenuEx`；关闭/最小化隐藏到托盘，主窗口懒创建。
+- **单实例** — `Local\LightSwitch.SingleInstance` 互斥体 + 隐藏窗口 `WM_APP` 消息转发；`--startup` 不会弹出已有窗口。
+- **命令行** — `--toggle`、`--apply light|dark`、`--startup`、`--hidden`、`--tray`；一次性命令不初始化 WinUI。
+- **配置迁移** — 新路径 `%LOCALAPPDATA%\LightSwitch\config.json`；首次运行可从 exe 同目录旧 `config.json` 导入，兼容 `snake_case` 偏移字段。
+- **原子保存** — 先写 `.tmp` 再替换；损坏配置备份为 `*.bad-yyyyMMddHHmmss`。
+- **日志** — `%LOCALAPPDATA%\LightSwitch\LightSwitch.log`，512 KB 滚动。
+- **测试** — 新增零依赖控制台测试 harness（30 个用例），覆盖调度边界、日出日落、配置兼容、手动覆盖、壁纸联动、Off 模式。
+
+### 🚀 性能与体验
+
+- **托盘静默启动**：不创建主窗口，工作集约 **91 MB**、私有内存 **64 MB**、33 线程，空闲 CPU ≈ 0%。
+- **主窗口打开**：工作集约 **147–162 MB**、私有内存约 101 MB。
+- **无 sleep 轮询**：30 秒 `DispatcherQueueTimer` + Night Light 注册表通知 + 托盘/系统事件驱动。
+- **壁纸预览限制解码尺寸**，避免 4K 图片占用大量 UI 内存。
+- **关闭到托盘**后进程保留，再次打开窗口比冷启动快。
+- 对比 v1（C++ / Win32，< 2 MB）内存明显上升；这是 WinUI 3 运行时的固定成本，已在 README 中如实说明。
+
+### ⚠️ 不兼容变更
+
+- **配置目录变更**：从 exe 同目录改为 `%LOCALAPPDATA%\LightSwitch\config.json`（首次启动尝试自动迁移）。
+- **不再单 EXE 零依赖**：默认构建自带 Windows App SDK，但需要 **.NET 10 Desktop Runtime**；可用 `build.ps1 -Publish -SelfContained` 生成自包含版本。
+- **外部编辑配置不再热重载**：v1 的 `FindFirstChangeNotification` 目录监听未移植；修改 `config.json` 后需重启应用。
+- **壁纸为全局一对**：暂不支持按显示器分别设置、纯色、Spotlight。
+- **旧 C++ 实现归档**：v1.1.0 源码、工程和构建脚本移动到 `legacy/`，不再维护。
+- **系统要求**：Windows 10 1809+ / Windows 11 x64；Mica 仅 Windows 11，Windows 10 回退纯色背景。
+
+### 🐛 开发期修复
+
+- 修复 `AppearanceEngine` 在 `ApplySettings(evaluate:false)`、`ManualApply`、`ManualApplyWallpaper`、`Refresh` 中只构造局部状态、未写回 `_state`，导致 UI 状态快照滞后于实际主题的问题。
+- 修复壁纸开关关闭时「应用」按钮不生效：`ApplyWallpaper` 改为仅在 `!changeWallpaper && !force` 时跳过。
+- 修复已最小化窗口无法从托盘恢复：`ShowMainWindow` 先 `OverlappedPresenter.Restore()`。
+- 修复 `RootGrid` 不透明背景遮住 Mica：改为透明，并在 Mica 不可用时回退主题背景色。
+- 修复 `--startup` 在已有实例运行时误弹窗口。
+- 修复 `Program.cs` lambda 参数命名导致的 `CS0029`，以及 `TrayHost` 缺少 `using LightSwitch.Core` 的编译错误。
+
+---
+
 ## [v1.1.0] — 2026-10-31
 
 ### ✨ 界面重构（微软原生 SDK，零新增依赖）

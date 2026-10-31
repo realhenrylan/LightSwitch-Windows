@@ -1,16 +1,35 @@
-# 构建输出
+# .NET build output
+[Bb]in/
+[Oo]bj/
+artifacts/
+publish/
+TestResults/
+*.user
+*.suo
+.vs/
+
+# Native build output (archived v1)
 x64/
 Debug/
 Release/
 *.obj
-*.log
+*.pdb
+*.ilk
+*.exp
+*.lib
 *.tlog
 *.lastbuildstate
+*.iobj
+*.ipdb
 
-# 运行时生成
+# Runtime output
 config.json
+!config.example.json
+*.bad-*
+*.log
 
-# VS 用户文件
-*.suo
-*.user
-*.vs/
+# OS / editor
+Thumbs.db
+desktop.ini
+.DS_Store
+.idea/

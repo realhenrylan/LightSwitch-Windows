@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/LightSwitch.App/LightSwitch.App.csproj" />
+    <Project Path="src/LightSwitch.Core/LightSwitch.Core.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/LightSwitch.Tests/LightSwitch.Tests.csproj" />
+  </Folder>
+</Solution>
