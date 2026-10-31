@@ -9,7 +9,7 @@ echo.
 
 REM Try to find Visual Studio via vswhere
 set "VSINSTALLDIR="
-for /f "usebackq tokens=*" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath 2^>nul`) do set "VSINSTALLDIR=%%i\"
+for /f "usebackq tokens=*" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -property installationPath 2^>nul`) do set "VSINSTALLDIR=%%i\"
 
 if not defined VSINSTALLDIR (
     echo [ERROR] Visual Studio not found.

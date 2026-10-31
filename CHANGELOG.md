@@ -18,6 +18,12 @@
 - `src/main.cpp` 增加 `InitCommonControlsEx`，移除 `IsDialogMessageW`（Tab 由编辑框子类处理）
 - `src/resource.h` 精简为 4 个输入框 ID + 托盘/热键 ID
 
+### 🐛 修复
+
+- **`build.bat` 找不到 Visual Studio Build Tools** — `vswhere` 默认不返回 Build Tools 实例，脚本因此报 `[ERROR] Visual Studio not found`；查询补上 `-products *`
+- **清单编译警告 RC 81010002** — `resources/app.manifest` 的 `requestedExecutionLevel` 补上 `requestedPrivileges`（`urn:schemas-microsoft-com:asm.v3`）外层节点，清单编译无警告
+- **单实例检测误判** — `CreateMutexW` 前重置 `LastError` 并检查句柄非空，避免残留错误码让新进程误以为已有实例而直接退出
+
 ## [v1.0.4] — 2026-08-01
 
 ### 🐛 修复

@@ -61,8 +61,9 @@ static bool ParseCommandLineArgs(int argc, wchar_t* argv[])
 
 int APIENTRY wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR lpCmdLine, int nCmdShow)
 {
+    SetLastError(0);
     HANDLE hMutex = CreateMutexW(nullptr, TRUE, L"LightSwitchStandalone_Mutex");
-    if (GetLastError() == ERROR_ALREADY_EXISTS)
+    if (hMutex && GetLastError() == ERROR_ALREADY_EXISTS)
     {
         HWND hWnd = FindWindowW(L"LightSwitchMainWindow", nullptr);
         if (hWnd) { ShowWindow(hWnd, SW_SHOW); SetForegroundWindow(hWnd); }
