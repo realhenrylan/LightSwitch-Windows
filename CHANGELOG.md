@@ -1,5 +1,23 @@
 # 变更日志
 
+## [v1.1.0] — 2026-10-31
+
+### ✨ 界面重构（微软原生 SDK，零新增依赖）
+
+- **全新 Win32 + GDI 自绘设置界面** — 仅使用 Windows SDK 自带的 User32 / GDI32 / ComCtl32，将主窗口重写为卡片式设置页：分段模式选择、开关控件、圆角输入框、操作按钮与状态区，替代原先固定坐标的经典控件；调度、托盘、热键、配置文件等行为完全不变
+- **高 DPI 自适应** — 声明 Per-Monitor V2，窗口与字体随显示器缩放调整，不再在高缩放下模糊
+- **深浅色跟随应用主题** — 界面按 `AppsUseLightTheme` 自动切换亮/暗两套配色，支持时同步深色标题栏与圆角窗口
+- **输入体验改进** — 时间/坐标输入框支持 `Enter` 提交、`Esc` 还原、`Tab` 切换；时间自动规范为 `HH:MM`；经纬度增加范围校验（-90~90 / -180~180），非法输入回退并短暂高亮
+- **Common-Controls v6 清单** — `app.manifest` 声明 Visual Styles 依赖，`build.bat` 通过 `/MANIFEST:EMBED` 内嵌清单
+- **版本号** 1.0.3 → 1.1.0
+
+### 🔧 内部
+
+- 新增 `src/UiTheme.h`：配色表、DPI 缩放、圆角/圆形/文字绘制、字体创建、深色标题栏（动态加载 `dwmapi.dll`，不新增链接依赖）
+- `src/MainWindow.h/.cpp` 重写为自绘窗口；保留 `WM_TRAYICON`、`WM_HOTKEY`、`WM_FILE_CHANGED`、托盘菜单等全部既有消息与行为
+- `src/main.cpp` 增加 `InitCommonControlsEx`，移除 `IsDialogMessageW`（Tab 由编辑框子类处理）
+- `src/resource.h` 精简为 4 个输入框 ID + 托盘/热键 ID
+
 ## [v1.0.4] — 2026-08-01
 
 ### 🐛 修复

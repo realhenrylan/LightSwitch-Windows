@@ -69,6 +69,9 @@ int APIENTRY wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR lpCmdLine, int nCmd
         return 0;
     }
     CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    // 自绘界面使用 ComCtl32 v6 控件与 DPI 感知 API
+    INITCOMMONCONTROLSEX icc = { sizeof(icc), ICC_STANDARD_CLASSES | ICC_WIN95_CLASSES };
+    InitCommonControlsEx(&icc);
     int argc = 0;
     wchar_t** argv = CommandLineToArgvW(GetCommandLineW(), &argc);
     bool shouldRunMain = true;
@@ -90,8 +93,8 @@ int APIENTRY wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR lpCmdLine, int nCmd
     MSG msg;
     while (GetMessageW(&msg, nullptr, 0, 0))
     {
-        if (!IsDialogMessageW(g_mainWindow->GetHwnd(), &msg))
-        { TranslateMessage(&msg); DispatchMessageW(&msg); }
+        TranslateMessage(&msg);
+        DispatchMessageW(&msg);
     }
     KillTimer(g_mainWindow->GetHwnd(), 1);
     UnregisterHotKey(g_mainWindow->GetHwnd(), IDH_TOGGLE_THEME);

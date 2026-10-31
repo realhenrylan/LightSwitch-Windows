@@ -18,6 +18,7 @@
 - **手动覆盖自动恢复** — 手动切换后，跨越时间边界自动恢复自动调度
 - **系统托盘常驻** — 窗口关闭则隐藏到托盘，双击或右键菜单唤出
 - **`/toggle` 命令行** — 一次性的亮暗切换（适合搭配脚本、快捷键等）
+- **现代设置界面** — 纯 Win32 + GDI 自绘（无 WinUI / Qt 等框架），DPI 自适应，界面跟随应用主题自动切换深浅色
 
 ---
 
@@ -36,6 +37,7 @@
 - [Visual Studio 2022](https://visualstudio.microsoft.com/)（或仅 [Build Tools for Visual Studio 2022](https://visualstudio.microsoft.com/downloads/#build-tools-for-visual-studio-2022)）
 - 勾选「使用 C++ 的桌面开发」工作负载
 - Windows 10 SDK（随 VS 自动安装）
+- 运行环境：Windows 10 1809+ / Windows 11（x64）
 
 #### 编译步骤
 
@@ -70,13 +72,21 @@ install.bat
 
 | 控件 | 说明 |
 |------|------|
-| 调度模式 | Off（关闭自动调度）/ FixedHours（固定时间）/ SunsetToSunrise（日出日落）/ FollowNightLight（跟随 Night Light） |
-| 系统主题 | 控制系统主题（任务栏、开始菜单） |
-| 应用主题 | 控制应用主题（窗口、控件） |
-| 亮色时间 / 暗色时间 | 固定时间模式下的切换时刻 |
-| 纬度 / 经度 | 日出日落模式所需的地理坐标（十进制度数） |
-| ☀ 手动切换为亮色 / ☾ 手动切换为暗色 | 立即手动切换 |
-| 状态栏 | 显示当前主题和调度模式 |
+| 调度模式 | 分段选择：关闭 / 固定时间段 / 日出日落 / 跟随夜间模式（对应 `Off` / `FixedHours` / `SunsetToSunrise` / `FollowNightLight`） |
+| 修改系统主题 | 控制系统主题（任务栏、开始菜单） |
+| 修改应用主题 | 控制应用主题（窗口、控件） |
+| 亮色时间 / 暗色时间 | 固定时间模式下的切换时刻，输入 `8:30` / `08:30` / `830` 均可，自动规范为 `HH:MM` |
+| 纬度 / 经度 | 日出日落模式所需的地理坐标（十进制度数），仅在该模式下可编辑 |
+| 切换为亮色 / 切换为暗色 | 立即手动切换 |
+| 状态区 | 显示当前主题、手动覆盖状态与调度模式；右上角胶囊显示「自动 / 手动 / 已关闭」 |
+
+> 输入框内按 `Enter` 提交、`Esc` 还原、`Tab` 切换；坐标超出 `-90~90` / `-180~180` 时会回退并短暂高亮。
+
+### 界面
+
+主窗口是纯 Win32 + GDI 自绘的设置页：卡片布局、分段模式选择、开关控件、圆角输入框。
+不引入 WinUI / Windows App SDK / Qt 等运行时，仅使用 Windows SDK 自带的 User32、GDI32、ComCtl32，
+界面随「应用主题」自动切换深浅色，并支持 Per-Monitor V2 高 DPI 缩放。
 
 ### 系统托盘
 
@@ -211,7 +221,8 @@ LightSwitch-Standalone/
     ├── ConfigManager.h/.cpp            # JSON 配置管理
     │
     │   # GUI 界面
-    ├── MainWindow.h/.cpp       # 主窗口封装
+    ├── MainWindow.h/.cpp       # 主窗口封装（自绘设置页）
+    ├── UiTheme.h               # 自绘工具层（配色 / DPI / 圆角 / 字体 / 深色标题栏）
     ├── TrayIcon.h/.cpp         # 系统托盘封装
     └── resource.h              # 资源 ID 定义
 ```
@@ -225,9 +236,9 @@ LightSwitch-Standalone/
 | 进程模型 | DLL (ModuleInterface) + Service (EXE) | **单 EXE** |
 | 内存占用 | ~15–30 MB（含 .NET 运行时） | **< 2 MB** |
 | CPU 空闲占用 | < 0.1%（.NET 后台线程） | **≈ 0%**（零轮询） |
-| 二进制体积 | ~500 KB（多个 DLL + EXE） | **~360 KB**（单文件） |
+| 二进制体积 | ~500 KB（多个 DLL + EXE） | **~370 KB**（单文件） |
 | 外部依赖 | 依赖 .NET 6+、PowerToys 基础设施 | **零**（仅 VC++ 运行时） |
-| GUI | WPF 设置页面（~50+ MB） | **纯 Win32**（< 10 KB 开销） |
+| GUI | WPF 设置页面（~50+ MB） | **纯 Win32 + GDI 自绘**（~30 KB 开销） |
 | 设置存储 | PowerToys SettingsAPI | **手写 JSON 解析器** |
 | 日志 | ETW + Logger | **OutputDebugString** |
 | 许可证 | MIT | MIT（基于 PowerToys 源码） |
@@ -258,6 +269,19 @@ HKCU\...\Themes\Personalize\
 ### 天文算法
 
 日出日落计算基于太阳赤纬和时角公式，精度满足日常使用需求。极圈（纬度 ≥ 66.5°）以内返回边界值。
+
+### 界面实现（v1.1.0）
+
+界面全部由 Windows SDK 原生 API 绘制，没有引入任何 UI 框架：
+
+| 部分 | 实现 |
+|------|------|
+| 窗口 | `WS_OVERLAPPEDWINDOW` 去掉可调整边框，固定尺寸，双缓冲绘制避免闪烁 |
+| 配色 | 亮/暗两套 `COLORREF` 调色板，跟随 `AppsUseLightTheme` 切换 |
+| 控件 | 分段模式选择、开关、圆角输入框、操作按钮、状态区均自绘；时间/坐标沿用原生 `EDIT` 子窗口保证输入法兼容 |
+| 高 DPI | `GetDpiForWindow` + `AdjustWindowRectExForDpi`，Per-Monitor V2 清单，布局按 96 DPI 逻辑像素缩放 |
+| 深色标题栏 | 动态加载 `dwmapi.dll` 调用 `DwmSetWindowAttribute`，不新增链接依赖 |
+| 资源 | 清单声明 `Microsoft.Windows.Common-Controls` 6.0，`InitCommonControlsEx` 初始化 |
 
 ---
 

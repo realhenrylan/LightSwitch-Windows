@@ -1,4 +1,11 @@
 #pragma once
+// 目标 Windows 10 及以上：启用 GetDpiForWindow / AdjustWindowRectExForDpi 等 API
+#ifndef WINVER
+#define WINVER 0x0A00
+#endif
+#ifndef _WIN32_WINNT
+#define _WIN32_WINNT 0x0A00
+#endif
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #ifndef _CRT_SECURE_NO_WARNINGS

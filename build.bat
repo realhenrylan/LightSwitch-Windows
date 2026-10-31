@@ -76,6 +76,7 @@ if %ERRORLEVEL% NEQ 0 goto :error
 echo [7/7] Linking...
 rc /fo"%OUTDIR%\LightSwitch.res" "%PROJDIR%\LightSwitch.rc"
 link %LFLAGS% ^
+    /MANIFEST:EMBED /MANIFESTINPUT:"%PROJDIR%\resources\app.manifest" ^
     "%OUTDIR%\pch.obj" ^
     "%OUTDIR%\ThemeHelper.obj" ^
     "%OUTDIR%\ThemeScheduler.obj" ^

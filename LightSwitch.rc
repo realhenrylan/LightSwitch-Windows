@@ -13,8 +13,8 @@ IDI_LIGHTSWITCH_LIGHT    ICON      "resources\LightSwitch.ico"
 IDI_LIGHTSWITCH_DARK     ICON      "resources\LightSwitch.ico"
 
 VS_VERSION_INFO VERSIONINFO
-FILEVERSION     1,0,0,0
-PRODUCTVERSION  1,0,0,0
+FILEVERSION     1,1,0,0
+PRODUCTVERSION  1,1,0,0
 FILEFLAGSMASK   VS_FFI_FILEFLAGSMASK
 #ifdef _DEBUG
 FILEFLAGS       VS_FF_DEBUG
@@ -31,12 +31,12 @@ BEGIN
         BEGIN
             VALUE "CompanyName",      "LightSwitch Standalone"
             VALUE "FileDescription",  "LightSwitch - Windows Auto Theme Switcher"
-            VALUE "FileVersion",      "1.0.0.0"
+            VALUE "FileVersion",      "1.1.0.0"
             VALUE "InternalName",     "LightSwitch.exe"
             VALUE "LegalCopyright",   "Based on Microsoft PowerToys (MIT) source code"
             VALUE "OriginalFilename", "LightSwitch.exe"
             VALUE "ProductName",      "LightSwitch Standalone"
-            VALUE "ProductVersion",   "1.0.0"
+            VALUE "ProductVersion",   "1.1.0"
         END
     END
     BLOCK "VarFileInfo"
