@@ -10,7 +10,7 @@
 - **精简 Windows App SDK 依赖** — 应用只引用 `Microsoft.WindowsAppSDK.WinUI` 与 `Microsoft.WindowsAppSDK.Runtime`，不再携带完整 metapackage；应用自身输出从 153 MB 降到约 93 MB。
 - **发布版窗口崩溃修复** — `dotnet publish` 不会复制 XAML 编译产物（`*.xbf`）和资源索引（`*.pri`），导致发布版托盘可启动、创建窗口时崩溃（`Microsoft.UI.Xaml.dll`，`0xc000027b`）。`LightSwitch.App.csproj` 增加 `CopyXamlArtifactsToPublish` target 显式复制。
 - **实测** — 自包含发布在剥离 `DOTNET_ROOT`、PATH 仅保留系统目录的环境下：窗口正常显示（150.8 MB WS），`--startup` 托盘模式 91.6 MB WS / 64.4 MB 私有内存 / 34 线程，关闭到托盘与单实例唤起正常。
-- **文档** — README 的系统要求、快速开始、性能、架构与发布章节已同步；v2.0.0 的“需要 .NET 10 Desktop Runtime”说明由本版本取代。
+- **文档** — README 重写为中英文双语（`README.md` / `README.en.md`），补充轻量化设计、实测数据与边界说明；系统要求、快速开始、性能、架构与发布章节已同步。v2.0.0 的“需要 .NET 10 Desktop Runtime”说明由本版本取代。
 
 ---
 
