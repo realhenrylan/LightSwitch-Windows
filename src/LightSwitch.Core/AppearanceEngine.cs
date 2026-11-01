@@ -16,6 +16,7 @@ public sealed class AppearanceEngine
     private AppSettings _settings;
     private EngineState _state;
     private DateTime? _manualUntil;
+    private bool? _manualLight;
     private SunTimes? _sunTimes;
     private DateTime _sunDate;
     private bool _targetLight;
@@ -61,6 +62,7 @@ public sealed class AppearanceEngine
             _settings = settings.Clone();
             _settings.Normalize();
             _manualUntil = null;
+            _manualLight = null;
             _sunDate = default;
             state = evaluate ? EvaluateLocked(EvaluationTrigger.SettingsChanged) : BuildState(_clock.Now);
             _state = state;
@@ -92,6 +94,7 @@ public sealed class AppearanceEngine
             EnsureSunTimes(now);
             var (lightTime, darkTime) = EffectiveTimes();
             _targetLight = light;
+            _manualLight = light;
 
             ApplyTheme(light, respectTargetFlags: true);
             ApplyWallpaper(light);
@@ -138,6 +141,7 @@ public sealed class AppearanceEngine
         lock (_gate)
         {
             _manualUntil = null;
+            _manualLight = null;
             _lastAction = "已恢复自动调度";
             state = EvaluateLocked(EvaluationTrigger.SettingsChanged);
         }
@@ -178,6 +182,7 @@ public sealed class AppearanceEngine
             }
 
             _manualUntil = null;
+            _manualLight = null;
             Log.Info("Manual override expired; resuming the schedule");
         }
 
@@ -357,6 +362,7 @@ public sealed class AppearanceEngine
             NightLightActive = _settings.ScheduleMode == ScheduleMode.FollowNightLight && _nightLight.IsActive,
             IsManualOverride = _manualUntil is { } until && now < until,
             ManualUntil = _manualUntil,
+            ManualLight = _manualUntil is { } manualUntil && now < manualUntil ? _manualLight : null,
             NextSwitchAt = nextSwitch,
             IsLightTarget = _targetLight,
             SunTimes = sunTimes,

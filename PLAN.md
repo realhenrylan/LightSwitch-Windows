@@ -1,8 +1,8 @@
 # LightSwitch 路线图
 
-本文件记录 v2.0.0 已完成的工作、当前限制与后续计划。v1 的历史计划保留在 [`legacy/PLAN-v1.md`](legacy/PLAN-v1.md)。
+本文件记录 v2.0.2 已完成的工作、当前限制与后续计划。v1 的历史计划保留在 [`legacy/PLAN-v1.md`](legacy/PLAN-v1.md)。
 
-## 当前版本：v2.0.0
+## 当前版本：v2.0.2
 
 ### 目标
 
@@ -19,7 +19,9 @@
 - [x] 单实例、命令行、`--startup` 静默启动、开机自启注册表项。
 - [x] 配置迁移：`%LOCALAPPDATA%\LightSwitch\config.json`，首次运行导入旧配置。
 - [x] 测试：零依赖控制台 harness，30 个用例全部通过。
-- [x] 构建脚本：`build.ps1` / `build.bat`，支持 `-Test` 与 `-Publish`。
+- [x] 构建脚本：`build.ps1` / `build.bat`，支持 `-Test`、`-Publish` 与 `-Installer`。
+- [x] Windows 安装器：Inno Setup，按用户安装、开始菜单/可选桌面快捷方式、可选开机自启、卸载入口；中文/英文。
+- [x] 安装包构建与发布自动化：`tools/build-installer.ps1` 与 `.github/workflows/release.yml`。
 - [x] 文档：README、CHANGELOG、legacy 归档说明。
 
 ### 验收基线
@@ -31,6 +33,7 @@
 | 托盘静默启动 | 约 91.6 MB 工作集 / 64.4 MB 私有内存 / 34 线程 |
 | 主窗口打开 | 约 147–162 MB 工作集 / 101 MB 私有内存 |
 | 输出体积 | 自包含约 170 MB / 461 个文件；框架依赖约 93 MB / 269 个文件 |
+| 安装包 | Inno Setup，约 43.5 MB；静默安装、覆盖升级、静默卸载通过 |
 | 单实例 | 第二实例退出码 0，主实例窗口被唤起 |
 | 系统要求 | Windows 10 1809+ / Windows 11 x64；默认发布无需 .NET；Mica 仅 Win11 |
 
@@ -53,8 +56,9 @@
 
 ### v2.3 — 分发
 
-- [ ] MSIX / 安装器，提供开始菜单快捷方式与卸载入口。
-- [ ] 代码签名与 GitHub Release 自动化。
+- [x] Inno Setup 安装器，提供开始菜单快捷方式与卸载入口（按用户安装，无需管理员）。
+- [x] GitHub Release 自动化（安装包 + 便携版 zip）。
+- [ ] 代码签名。
 - [ ] ARM64 构建。
 - [ ] 可选：winget / Scoop 清单。
 

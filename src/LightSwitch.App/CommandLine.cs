@@ -1,9 +1,39 @@
 namespace LightSwitch.App;
 
 /// <summary>Parses the small command-line surface kept from the C++ build.</summary>
-public sealed record CommandLine(bool Toggle, bool Light, bool Dark, bool Startup, bool Hidden)
+public sealed record CommandLine(
+    bool Toggle,
+    bool Light,
+    bool Dark,
+    bool Startup,
+    bool Hidden,
+    bool EnableStartup,
+    bool DisableStartup)
 {
-    public bool IsOneShot => Toggle || Light || Dark;
+    public bool IsOneShot => Toggle || Light || Dark || EnableStartup || DisableStartup;
+
+    /// <summary>
+    /// True/false when the caller wants to change the sign-in setting, null for
+    /// the normal theme commands. The installer uses the two startup switches
+    /// so the registry entry and config.json stay in sync.
+    /// </summary>
+    public bool? StartupPreference
+    {
+        get
+        {
+            if (EnableStartup)
+            {
+                return true;
+            }
+
+            if (DisableStartup)
+            {
+                return false;
+            }
+
+            return null;
+        }
+    }
 
     public static CommandLine Parse(string[] args)
     {
@@ -12,6 +42,8 @@ public sealed record CommandLine(bool Toggle, bool Light, bool Dark, bool Startu
         var dark = false;
         var startup = false;
         var hidden = false;
+        var enableStartup = false;
+        var disableStartup = false;
 
         for (var i = 0; i < args.Length; i++)
         {
@@ -48,9 +80,17 @@ public sealed record CommandLine(bool Toggle, bool Light, bool Dark, bool Startu
                 case "--tray":
                     hidden = true;
                     break;
+                case "--enable-startup":
+                case "/enable-startup":
+                    enableStartup = true;
+                    break;
+                case "--disable-startup":
+                case "/disable-startup":
+                    disableStartup = true;
+                    break;
             }
         }
 
-        return new CommandLine(toggle, light, dark, startup, hidden);
+        return new CommandLine(toggle, light, dark, startup, hidden, enableStartup, disableStartup);
     }
 }

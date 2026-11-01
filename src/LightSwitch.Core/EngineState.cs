@@ -11,6 +11,8 @@ public sealed record EngineState
     public bool IsAppsLight { get; init; }
     public bool NightLightActive { get; init; }
     public bool IsManualOverride { get; init; }
+    /// <summary>The appearance picked by the last manual switch, while it is still in effect.</summary>
+    public bool? ManualLight { get; init; }
     public DateTime? ManualUntil { get; init; }
     public DateTime? NextSwitchAt { get; init; }
     public bool IsLightTarget { get; init; }

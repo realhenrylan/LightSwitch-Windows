@@ -5,6 +5,7 @@ using Microsoft.UI;
 using Microsoft.UI.Composition.SystemBackdrops;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
@@ -258,7 +259,9 @@ public sealed partial class MainWindow : Window
 
         HeroSubtitle.Text = state.Mode == ScheduleMode.Off
             ? "自动调度已关闭"
-            : $"{mode} · 目标{(state.IsLightTarget ? "浅色" : "深色")}";
+            : $"{mode} · 目标{((state.ManualLight ?? state.IsLightTarget) ? "浅色" : "深色")}";
+
+        UpdateAppearanceButtons(state);
 
         var details = new List<string>();
         if (state.IsManualOverride && state.ManualUntil is { } until)
@@ -307,6 +310,44 @@ public sealed partial class MainWindow : Window
         {
             _lastError = null;
         }
+    }
+
+    private void UpdateAppearanceButtons(EngineState state)
+    {
+        // Exactly one of the three buttons shows the active choice:
+        // 浅色/深色 while a manual choice is in effect (or while automatic
+        // control is off), 恢复自动 while the schedule is driving the look.
+        // Prefer ManualLight because IsLightTarget re-syncs to the system theme.
+        bool? selectedLight = state.IsManualOverride
+            ? state.ManualLight ?? state.IsLightTarget
+            : state.Mode == ScheduleMode.Off
+                ? state.IsSystemLight
+                : null;
+
+        var selectedStyle = (Style)Application.Current.Resources["AppearanceSelectedButtonStyle"];
+        ApplyChoice(LightButton, selectedLight == true, selectedStyle);
+        ApplyChoice(DarkButton, selectedLight == false, selectedStyle);
+        ApplyChoice(AutoButton, selectedLight is null, selectedStyle);
+
+        AutoButton.IsEnabled = state.Mode != ScheduleMode.Off;
+        ToolTipService.SetToolTip(AutoButton, AutoButton.IsEnabled
+            ? "清除手动覆盖，跟随调度"
+            : "自动调度已关闭，请先在「调度」中选择切换方式");
+    }
+
+    private static void ApplyChoice(Button button, bool selected, Style selectedStyle)
+    {
+        if (selected)
+        {
+            button.Style = selectedStyle;
+        }
+        else if (button.Style is not null)
+        {
+            button.ClearValue(FrameworkElement.StyleProperty);
+        }
+
+        var label = button.Content?.ToString() ?? string.Empty;
+        AutomationProperties.SetName(button, selected ? $"{label}，当前已选择" : label);
     }
 
     private void ShowMessage(string title, string message, InfoBarSeverity severity)

@@ -6,7 +6,7 @@
 
 LightSwitch 让 Windows 的**系统主题、应用主题和桌面壁纸**跟随固定时间、日出日落或 Night Light 自动切换。v2 使用 **C# + WinUI 3 + Windows App SDK + Fluent Design** 重写，同时保留托盘常驻、全局热键、单实例、开机自启和命令行控制。
 
-**v2.0.1：默认自包含发布。目标电脑不需要安装 .NET，也不需要 Windows App Runtime。**
+**v2.0.2：新增 Windows 安装包和外观按钮选中反馈；默认自包含发布。目标电脑不需要安装 .NET，也不需要 Windows App Runtime。**
 
 > 日常只常驻一个约 92 MB 的托盘进程；只有打开设置时才创建主窗口。
 
@@ -92,6 +92,7 @@ v2 的目标不是假装这项成本不存在，而是在保留 Fluent 界面的
 - **全局热键**：`Ctrl+Alt+Shift+D` 一键切换浅色/深色（同时切换壁纸）。
 - **开机自启**：应用内开关，写入当前用户 `Run` 键，以 `--startup` 静默启动。
 - **命令行**：`--toggle`、`--apply light|dark`、`--startup` 等。
+- **安装包**：按用户安装、无需管理员；中英文向导、开始菜单 / 可选桌面快捷方式、标准卸载入口。
 - **Fluent 界面**：卡片布局、Mica 背景（Windows 11）、自定义标题栏、深浅色自适应。
 - **零管理员权限**：只写 HKCU 和当前用户桌面壁纸，不安装服务、不需要提权。
 
@@ -104,26 +105,42 @@ v2 的目标不是假装这项成本不存在，而是在保留 Fluent 界面的
 | 操作系统 | Windows 10 1809+ / Windows 11，x64 |
 | 运行时（默认发布） | **无**：自带 .NET 10 与 Windows App SDK |
 | 图形 | 支持 WinUI 3 的 Windows 桌面环境 |
-| 权限 | 普通用户（HKCU + 当前用户壁纸） |
+| 权限 | 普通用户（HKCU + 当前用户壁纸）；安装版无需管理员 |
 | 磁盘 | 默认自包含约 170 MB；框架依赖约 93 MB |
+| 安装包（可选） | 约 44 MB；按用户安装，卸载入口在“设置 → 应用” |
 
 说明：
 
 - Mica 是 Windows 11 特性；Windows 10 会自动回退为纯色背景，其他功能不受影响。
 - 如果更在意磁盘体积，且目标机已安装 .NET 10 Desktop Runtime，可用 `build.ps1 -Publish -FrameworkDependent`。
 - 构建机需要 .NET 10 SDK；自包含打包会把构建机上的 .NET 10 运行时复制进发布目录，不需要从 NuGet 下载 runtime pack。
+- 安装包未做代码签名，Windows SmartScreen 可能提示“Windows 已保护你的电脑”；可核对 Release 中的 SHA256，或从源码自行构建。
 
 ---
 
 ## 快速开始
 
-### 从源码构建
+### 安装版（推荐）
+
+从 [Releases](https://github.com/realhenrylan/LightSwitch-Windows/releases) 下载 `LightSwitch-<版本>-setup.exe`，双击运行。
+
+- **按用户安装，无需管理员权限**。默认安装到 `%LOCALAPPDATA%\Programs\LightSwitch`，开始菜单会创建 LightSwitch 快捷方式。
+- 安装向导支持简体中文和 English，可选创建桌面快捷方式。
+- **开机自启默认勾选**，仅全新安装时应用；覆盖升级不会改动设置中的选择，安装完成后可随时在设置中关闭。
+- 卸载：Windows“设置 → 应用 → LightSwitch”，或开始菜单中的卸载入口。卸载默认保留 `%LOCALAPPDATA%\LightSwitch` 中的设置、日志和缓存；如需彻底清除，在卸载向导中选择“是”；静默卸载始终保留数据。
+- 不想安装？下载 `LightSwitch-<版本>-portable.zip`，解压后直接运行 `LightSwitch.exe`。
+- 安装包和便携版都附带同名 `.sha256`，可用 `Get-FileHash` 或 `certutil -hashfile` 核对。
+
+静默安装与卸载参数见 [installer/README.md](installer/README.md)。
+
+### 从源码构建（可选）
 
 前置条件：
 
 - [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)（10.0.4xx 或更高）
 - Windows 10/11 x64
 - 首次构建能访问 NuGet（之后走本机缓存）
+- 仅构建安装包时需要 [Inno Setup 6.5+](https://jrsoftware.org/isdl.php)；只构建/运行应用可跳过
 
 ```powershell
 git clone https://github.com/realhenrylan/LightSwitch-Windows.git
@@ -132,15 +149,20 @@ cd LightSwitch-Windows
 # 构建 Release
 .\build.ps1
 
-# 构建并运行 30 个测试
+# 构建并运行 31 个测试
 .\build.ps1 -Test
 
 # 发布自包含目录（目标机器无需安装 .NET）
 .\build.ps1 -Publish
 
+# 发布并生成安装包（需要 Inno Setup 6.5+）
+.\build.ps1 -Publish -Installer
+
 # 可选：更小的框架依赖版本（目标机器需 .NET 10 Desktop Runtime）
 .\build.ps1 -Publish -FrameworkDependent
 ```
+
+`-Installer` 会自动隐含 `-Publish`，并与 `-FrameworkDependent` 互斥（安装包必须打包自包含目录）。只想用已有发布目录重新编译安装包时，可用 `.\tools\build-installer.ps1 -SkipPublish`。
 
 也可以直接双击 `build.bat`。默认构建输出：
 
@@ -154,7 +176,17 @@ src\LightSwitch.App\bin\Release\net10.0-windows10.0.19041.0\win-x64\LightSwitch.
 artifacts\LightSwitch-win-x64\LightSwitch.exe
 ```
 
+安装包输出：
+
+```text
+artifacts\LightSwitch-<版本>-setup.exe
+```
+
+构建脚本同时生成 `LightSwitch-<版本>-setup.exe.sha256`。GitHub Release 还会提供 `LightSwitch-<版本>-portable.zip` 及其 `.sha256`。
+
 ### 从 v1.x 升级
+
+安装版用户直接运行新版本 `setup.exe` 覆盖安装即可；安装器会先结束正在运行的 LightSwitch，设置和日志保存在 `%LOCALAPPDATA%\LightSwitch`，不会被覆盖。便携版用户按下面步骤操作：
 
 1. 退出旧的 C++ 版 LightSwitch。
 2. 运行 v2 的 `LightSwitch.exe`。
@@ -171,7 +203,7 @@ artifacts\LightSwitch-win-x64\LightSwitch.exe
 
 | 区域 | 说明 |
 |------|------|
-| 当前外观 | 当前系统主题、调度模式、下次切换时间；提供「浅色」「深色」「恢复自动」 |
+| 当前外观 | 当前系统主题、调度模式、下次切换时间；「浅色」「深色」「恢复自动」会用强调色标出当前生效的选项，手动切换后保持高亮，直到覆盖结束或点「恢复自动」；自动调度关闭时「恢复自动」不可用 |
 | 调度 | 关闭 / 固定时间段 / 日出日落 / 跟随夜间模式；24 小时制 |
 | 日出日落 | 纬度、经度、日出偏移、日落偏移；仅该模式可编辑 |
 | 应用外观的对象 | 分别控制 Windows 系统主题和应用主题 |
@@ -231,10 +263,13 @@ LightSwitch.exe --tray             # 同上
 LightSwitch.exe --toggle           # 切换一次主题+壁纸后退出
 LightSwitch.exe --apply light      # 应用浅色主题+浅色壁纸后退出
 LightSwitch.exe --apply dark       # 应用深色主题+深色壁纸后退出
+LightSwitch.exe --enable-startup   # 写入开机自启后退出
+LightSwitch.exe --disable-startup  # 移除开机自启后退出
 ```
 
-- `/toggle`、`/light`、`/dark` 也受支持。
-- 一次性命令不会初始化 WinUI；如果已有实例在运行，命令会通过隐藏窗口转发给主实例。
+- `/toggle`、`/light`、`/dark`、`/enable-startup`、`/disable-startup` 也受支持。
+- 一次性命令不会初始化 WinUI；如果已有实例在运行，主题类命令会通过隐藏窗口转发给主实例。
+- `--enable-startup` / `--disable-startup` 同时更新 `config.json` 的 `runAtStartup` 和 HKCU `Run` 项，失败时退出码为 1。这两个命令修改的是磁盘配置和注册表，始终由新进程直接执行，不转发给托盘实例；安装器在全新安装时调用 `--enable-startup`。
 - `--startup` / `--hidden` / `--tray` 在已有实例运行时不会弹出窗口。
 
 ---
@@ -329,7 +364,14 @@ LightSwitch-Windows/
 ├── Directory.Build.props         # 版本、语言版本等公共属性
 ├── NuGet.config                  # nuget.org 源
 ├── build.ps1 / build.bat         # 构建、测试、发布
+├── .github/
+│   └── workflows/release.yml     # 标签触发的发布自动化
+├── installer/
+│   ├── LightSwitch.iss           # Inno Setup 安装脚本
+│   ├── ChineseSimplified.isl     # 安装向导简体中文语言文件
+│   └── README.md                 # 安装包构建与静默安装说明
 ├── tools/
+│   ├── build-installer.ps1       # 编译安装包并生成 SHA256
 │   └── bundle-dotnet-runtime.ps1 # 把 .NET 运行时装入发布目录
 ├── config.example.json           # 配置示例
 ├── README.md / README.en.md      # 中文 / English
@@ -360,7 +402,7 @@ LightSwitch-Windows/
 │       ├── Interop/NativeMethods.cs
 │       └── Assets/app.ico
 ├── tests/
-│   └── LightSwitch.Tests/        # 零依赖控制台测试 harness（30 个用例）
+│   └── LightSwitch.Tests/        # 零依赖控制台测试 harness（31 个用例）
 └── legacy/                       # v1.1.0 C++ / Win32 + GDI 归档
 ```
 
@@ -460,6 +502,8 @@ Windows 11 会把新图标收进溢出区。打开「设置 → 个性化 → �
 ### 开机自启没生效
 
 - 设置中打开「开机时自动启动」会写 `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`，值为 `"<当前 exe 路径>" --startup`。
+- 安装版在全新安装时默认勾选开机自启；覆盖升级不会改动设置中的选择。
+- 也可以运行 `LightSwitch.exe --enable-startup` 或 `--disable-startup`，同时同步 `config.json` 与注册表；失败时退出码为 1。
 - 移动过 exe 后，关闭再打开一次该开关，刷新路径。
 - 某些安全软件会拦截 Run 键写入；查看日志中的 `startup` 错误。
 
@@ -487,9 +531,9 @@ dotnet build LightSwitch.slnx -c Release
 - `ScheduleMath`：同日/跨午夜边界、下一个边界、精确边界顺延；
 - `SunCalculator`：北京、赤道、极昼、非法坐标；
 - `SettingsService`：旧 snake_case 配置、往返序列化、Normalize；
-- `AppearanceEngine`：固定时间、手动覆盖到下一个边界、FollowNightLight、亮/暗壁纸、Off 模式、日落偏移。
+- `AppearanceEngine`：固定时间、手动覆盖到下一个边界、FollowNightLight、亮/暗壁纸、Off 模式、日落偏移，以及主题目标关闭时仍记住手动选择。
 
-当前结果：**30/30 通过**。
+当前结果：**31/31 通过**。
 
 ### 发布
 
@@ -502,6 +546,18 @@ dotnet build LightSwitch.slnx -c Release
 ```
 
 输出在 `artifacts\LightSwitch-win-x64\`（可用 `-OutputDirectory` 覆盖）。
+
+生成安装包：
+
+```powershell
+# 发布 + 安装包（需要 Inno Setup 6.5+；ISCC.exe 在 PATH 或默认安装目录）
+.\build.ps1 -Publish -Installer
+```
+
+- 安装包输出 `artifacts\LightSwitch-<版本>-setup.exe`，同时写入同名 `.sha256`。
+- `-Installer` 自动隐含 `-Publish`，与 `-FrameworkDependent` 互斥。`tools\build-installer.ps1` 可单独调用：`-SkipPublish` 复用已有发布目录，`-IsccPath` 指定 ISCC.exe，`-Version` 覆盖版本号。
+- 推送 `v*` 标签或手动触发 `.github/workflows/release.yml` 时，工作流会把标签名（或手动填写的 `version` 输入）去掉 `v` 前缀后与 `Directory.Build.props` 的 `<Version>` 比对，不一致直接失败；随后构建并测试、生成安装包和便携版 zip 及各自的 SHA256，最后创建或更新 GitHub Release。
+- Release 资产：`LightSwitch-<版本>-setup.exe`、`LightSwitch-<版本>-portable.zip`，以及两者的 `.sha256`。
 
 自包含发布先由 `dotnet publish` 生成框架依赖目录，再由 `tools/bundle-dotnet-runtime.ps1` 完成：
 

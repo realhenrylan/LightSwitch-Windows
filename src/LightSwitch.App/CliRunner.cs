@@ -10,6 +10,13 @@ internal static class CliRunner
 
     public static bool TryForward(CommandLine command)
     {
+        // Startup changes belong to the on-disk configuration, not to the
+        // running tray instance, so they are always executed here.
+        if (command.StartupPreference is not null)
+        {
+            return false;
+        }
+
         var hwnd = NativeMethods.FindWindowW(TrayWindowClass, null);
         if (hwnd == IntPtr.Zero)
         {
@@ -40,7 +47,31 @@ internal static class CliRunner
         try
         {
             Log.Initialize(AppPaths.LogPath);
-            var settings = new SettingsService().Load();
+            var settingsService = new SettingsService();
+            var settings = settingsService.Load();
+
+            if (command.StartupPreference is bool enabled)
+            {
+                settings.RunAtStartup = enabled;
+                settingsService.Save(settings);
+                if (settingsService.LastError is not null)
+                {
+                    Log.Error($"Could not save the start-at-sign-in setting: {settingsService.LastError}");
+                    Environment.ExitCode = 1;
+                    return;
+                }
+
+                if (!new StartupService().TrySetEnabled(enabled, out var startupError))
+                {
+                    Log.Error($"Could not update the start-at-sign-in registry entry: {startupError}");
+                    Environment.ExitCode = 1;
+                    return;
+                }
+
+                Log.Info($"Start at sign-in {(enabled ? "enabled" : "disabled")}.");
+                return;
+            }
+
             var theme = new ThemeService();
             var current = theme.GetSystemLight() ?? theme.GetAppsLight() ?? false;
             var light = command.Light || (!command.Dark && !current);

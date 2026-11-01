@@ -57,6 +57,7 @@ public class AppearanceEngineTests
         engine.ManualApply(true);
         Assert.True(theme.SystemLight);
         Assert.True(engine.State.IsManualOverride);
+        Assert.True(engine.State.ManualLight);
         Assert.Equal(new DateTime(2026, 11, 2, 8, 0, 0), engine.State.ManualUntil);
 
         clock.Now = new DateTime(2026, 11, 2, 7, 59, 0);
@@ -68,11 +69,41 @@ public class AppearanceEngineTests
         engine.Evaluate(EvaluationTrigger.Timer);
         Assert.True(theme.SystemLight);
         Assert.False(engine.State.IsManualOverride);
+        Assert.Null(engine.State.ManualLight);
         Assert.Null(engine.State.ManualUntil);
 
         clock.Now = new DateTime(2026, 11, 2, 20, 0, 0);
         engine.Evaluate(EvaluationTrigger.Timer);
         Assert.False(theme.SystemLight);
+    }
+
+    [Fact]
+    public void ManualApply_KeepsTheChosenAppearanceWhenThemeTargetsAreDisabled()
+    {
+        var clock = new FakeClock(new DateTime(2026, 11, 1, 21, 0, 0));
+        var theme = new FakeTheme { SystemLight = false, AppsLight = false };
+        var (engine, _, _, _) = Create(clock, theme, new AppSettings
+        {
+            ScheduleMode = ScheduleMode.FixedHours,
+            LightTime = 8 * 60,
+            DarkTime = 20 * 60,
+            ChangeSystem = false,
+            ChangeApps = false,
+            ChangeWallpaper = false,
+        });
+
+        engine.Evaluate(EvaluationTrigger.Startup);
+        engine.ManualApply(true);
+        Assert.True(engine.State.ManualLight);
+
+        clock.Now = clock.Now.AddSeconds(30);
+        engine.Evaluate(EvaluationTrigger.Timer);
+
+        // The manual choice is remembered even though the system theme did not
+        // change, so the UI can keep highlighting the button the user pressed.
+        Assert.True(engine.State.IsManualOverride);
+        Assert.True(engine.State.ManualLight);
+        Assert.False(engine.State.IsLightTarget);
     }
 
     [Fact]

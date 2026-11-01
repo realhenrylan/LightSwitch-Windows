@@ -6,7 +6,7 @@
 
 LightSwitch automatically switches the Windows **system theme, app theme, and desktop wallpaper** based on fixed hours, sunrise/sunset, or Night Light. v2 is rewritten in **C# + WinUI 3 + Windows App SDK + Fluent Design**, while keeping tray residency, a global hotkey, single-instance behavior, run-at-startup, and command-line control.
 
-**v2.0.1: self-contained by default. The target PC needs neither .NET nor the Windows App Runtime.**
+**v2.0.2: Windows installer and selected-appearance button feedback added; self-contained by default. The target PC needs neither .NET nor the Windows App Runtime.**
 
 > In daily use it is a single ~92 MB tray process; the main window is created only when you open Settings.
 
@@ -91,7 +91,8 @@ If the target PC already has the .NET 10 Desktop Runtime, `-FrameworkDependent` 
 - **Single instance**: a second launch brings the existing window forward; a second `--startup` launch does not pop up a window.
 - **Global hotkey**: `Ctrl+Alt+Shift+D` switches light/dark (and wallpaper).
 - **Run at startup**: an in-app toggle writes the current user's `Run` key and starts with `--startup`.
-- **Command line**: `--toggle`, `--apply light|dark`, `--startup`, and more.
+- **Command line**: `--toggle`, `--apply light|dark`, `--startup`, `--enable-startup` / `--disable-startup`, and more.
+- **Installer**: per-user, no administrator rights; Chinese/English wizard, Start Menu and optional desktop shortcuts, standard uninstall entry.
 - **Fluent UI**: card layout, Mica backdrop (Windows 11), custom title bar, light/dark resources.
 - **No administrator rights**: writes only HKCU and the current user's desktop wallpaper; no service, no elevation.
 
@@ -104,26 +105,42 @@ If the target PC already has the .NET 10 Desktop Runtime, `-FrameworkDependent` 
 | OS | Windows 10 1809+ / Windows 11, x64 |
 | Runtime (default build) | **None**: .NET 10 and Windows App SDK are bundled |
 | Graphics | A Windows desktop capable of WinUI 3 |
-| Permissions | Standard user (HKCU + current user's wallpaper) |
+| Permissions | Standard user (HKCU + current user's wallpaper); the installer needs no admin |
 | Disk | About 170 MB self-contained; about 93 MB framework-dependent |
+| Installer (optional) | About 44 MB; per-user install, uninstall entry in Settings > Apps |
 
 Notes:
 
 - Mica is a Windows 11 feature. Windows 10 falls back to a solid background; everything else still works.
 - If disk size matters more and the target PC has the .NET 10 Desktop Runtime, use `build.ps1 -Publish -FrameworkDependent`.
 - The build machine needs the .NET 10 SDK. The self-contained bundler copies that machine's .NET 10 runtime into the publish folder; it does not download runtime packs from NuGet.
+- The installer is not code-signed, so Windows SmartScreen may show "Windows protected your PC". Verify the SHA256 published with the release, or build from source yourself.
 
 ---
 
 ## Quick start
 
-### Build from source
+### Installer (recommended)
+
+Download `LightSwitch-<version>-setup.exe` from [Releases](https://github.com/realhenrylan/LightSwitch-Windows/releases) and run it.
+
+- **Per-user install, no administrator rights.** The default location is `%LOCALAPPDATA%\Programs\LightSwitch`; a Start Menu shortcut is created.
+- The wizard supports Simplified Chinese and English, and offers an optional desktop shortcut.
+- **Run at startup is enabled by default**, applied only on a fresh install; upgrades leave your existing choice alone, and it can be turned off later in Settings.
+- To uninstall: Settings > Apps > LightSwitch, or the Start Menu uninstall entry. User settings, logs, and cache in `%LOCALAPPDATA%\LightSwitch` are kept by default; choose "Yes" in the uninstall wizard to remove them. A silent uninstall always keeps the data.
+- Prefer no install? Download `LightSwitch-<version>-portable.zip`, extract it, and run `LightSwitch.exe`.
+- Both the installer and the portable zip ship with a matching `.sha256`; verify it with `Get-FileHash` or `certutil -hashfile`.
+
+For silent install and uninstall arguments, see [installer/README.md](installer/README.md).
+
+### Build from source (optional)
 
 Prerequisites:
 
 - [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) (10.0.4xx or newer)
 - Windows 10/11 x64
 - NuGet access on the first build (later builds use the local cache)
+- [Inno Setup 6.5+](https://jrsoftware.org/isdl.php) only if you build the installer; skip it to build/run the app alone
 
 ```powershell
 git clone https://github.com/realhenrylan/LightSwitch-Windows.git
@@ -132,15 +149,20 @@ cd LightSwitch-Windows
 # Build Release
 .\build.ps1
 
-# Build and run 30 tests
+# Build and run 31 tests
 .\build.ps1 -Test
 
 # Publish a self-contained folder (no .NET install on the target)
 .\build.ps1 -Publish
 
+# Publish and build the installer (requires Inno Setup 6.5+)
+.\build.ps1 -Publish -Installer
+
 # Optional: smaller framework-dependent build (target needs .NET 10 Desktop Runtime)
 .\build.ps1 -Publish -FrameworkDependent
 ```
+
+`-Installer` implies `-Publish` and is mutually exclusive with `-FrameworkDependent` (the installer packages the self-contained folder). To recompile the installer against an existing publish folder, use `.\tools\build-installer.ps1 -SkipPublish`.
 
 You can also run `build.bat`. Default build output:
 
@@ -154,7 +176,17 @@ Default publish output:
 artifacts\LightSwitch-win-x64\LightSwitch.exe
 ```
 
+Installer output:
+
+```text
+artifacts\LightSwitch-<version>-setup.exe
+```
+
+The build also writes `LightSwitch-<version>-setup.exe.sha256`. GitHub Releases additionally provide `LightSwitch-<version>-portable.zip` and its `.sha256`.
+
 ### Upgrading from v1.x
+
+If you use the installer, just run the new `setup.exe` over the existing install. It stops the running LightSwitch first; settings and logs in `%LOCALAPPDATA%\LightSwitch` are preserved. Portable users can follow these steps:
 
 1. Exit the old C++ LightSwitch.
 2. Run the v2 `LightSwitch.exe`.
@@ -171,7 +203,7 @@ The v1 source is archived under [`legacy/`](legacy/README.md) for reference only
 
 | Area | Description |
 |------|-------------|
-| Current appearance | Current system theme, schedule mode, next switch time; light, dark, and “restore automatic” buttons |
+| Current appearance | Current system theme, schedule mode, next switch time; light, dark, and “restore automatic” mark the choice in effect with an accent color. A manual switch stays highlighted until the override ends or you click “restore automatic”; “restore automatic” is disabled when the schedule is off |
 | Schedule | Off / fixed hours / sunrise-sunset / follow Night Light; 24-hour time |
 | Sunrise/sunset | Latitude, longitude, sunrise offset, sunset offset; editable only in this mode |
 | Theme targets | Control Windows system theme and app theme independently |
@@ -231,10 +263,13 @@ LightSwitch.exe --tray             # Same as --startup
 LightSwitch.exe --toggle           # Switch theme + wallpaper once, then exit
 LightSwitch.exe --apply light      # Apply light theme + light wallpaper, then exit
 LightSwitch.exe --apply dark       # Apply dark theme + dark wallpaper, then exit
+LightSwitch.exe --enable-startup   # Enable run-at-startup, then exit
+LightSwitch.exe --disable-startup  # Disable run-at-startup, then exit
 ```
 
-- `/toggle`, `/light`, and `/dark` are also supported.
-- One-shot commands do not initialize WinUI. If an instance is already running, they are forwarded through its hidden window.
+- `/toggle`, `/light`, `/dark`, `/enable-startup`, and `/disable-startup` are also supported.
+- One-shot commands do not initialize WinUI. If an instance is already running, theme commands are forwarded through its hidden window.
+- `--enable-startup` / `--disable-startup` update both `runAtStartup` in `config.json` and the HKCU `Run` entry, exiting with code 1 on failure. Because they change on-disk configuration and the registry, they are always executed directly by the new process and never forwarded to the tray instance; the installer calls `--enable-startup` on a fresh install.
 - `--startup` / `--hidden` / `--tray` do not pop up an existing window.
 
 ---
@@ -329,7 +364,14 @@ LightSwitch-Windows/
 ├── Directory.Build.props         # Shared version/language properties
 ├── NuGet.config                  # nuget.org source
 ├── build.ps1 / build.bat         # Build, test, publish
+├── .github/
+│   └── workflows/release.yml     # Tag-driven release automation
+├── installer/
+│   ├── LightSwitch.iss           # Inno Setup script
+│   ├── ChineseSimplified.isl     # Simplified Chinese wizard language file
+│   └── README.md                 # Installer build and silent-install notes
 ├── tools/
+│   ├── build-installer.ps1       # Compile the installer and write SHA256
 │   └── bundle-dotnet-runtime.ps1 # Copy the .NET runtime into the publish folder
 ├── config.example.json           # Example configuration
 ├── README.md / README.en.md      # Chinese / English
@@ -360,7 +402,7 @@ LightSwitch-Windows/
 │       ├── Interop/NativeMethods.cs
 │       └── Assets/app.ico
 ├── tests/
-│   └── LightSwitch.Tests/        # Zero-dependency console harness (30 cases)
+│   └── LightSwitch.Tests/        # Zero-dependency console harness (31 cases)
 └── legacy/                       # v1.1.0 C++ / Win32 + GDI archive
 ```
 
@@ -460,6 +502,8 @@ Windows 11 puts new icons in the overflow area. Open Settings → Personalizatio
 ### Run at startup does not work
 
 - Enabling “Run at startup” writes `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` with `"<current exe path>" --startup`.
+- The installer pre-checks run-at-startup on a fresh install; an in-place upgrade leaves your existing choice alone.
+- You can also run `LightSwitch.exe --enable-startup` or `--disable-startup` to update both `config.json` and the registry; failure exits with code 1.
 - After moving the executable, toggle the option off and on to refresh the path.
 - Some security products block Run-key writes; check the log for `startup` errors.
 
@@ -487,9 +531,9 @@ Tests use a zero-dependency console harness (`tests/LightSwitch.Tests`) with no 
 - `ScheduleMath`: same-day and cross-midnight boundaries, next boundary, exact-boundary rollover;
 - `SunCalculator`: Beijing, equator, polar day, invalid coordinates;
 - `SettingsService`: legacy snake_case config, round-trip serialization, Normalize;
-- `AppearanceEngine`: fixed hours, manual override to the next boundary, FollowNightLight, light/dark wallpaper, Off mode, sunset offsets.
+- `AppearanceEngine`: fixed hours, manual override to the next boundary, FollowNightLight, light/dark wallpaper, Off mode, sunset offsets, and keeping the manual choice when the theme targets are disabled.
 
-Current result: **30/30 passing**.
+Current result: **31/31 passing**.
 
 ### Publish
 
@@ -502,6 +546,18 @@ Current result: **30/30 passing**.
 ```
 
 Output goes to `artifacts\LightSwitch-win-x64\` (override with `-OutputDirectory`).
+
+Build the installer:
+
+```powershell
+# Publish + installer (requires Inno Setup 6.5+; ISCC.exe on PATH or in the default install folder)
+.\build.ps1 -Publish -Installer
+```
+
+- The installer is written to `artifacts\LightSwitch-<version>-setup.exe` with a matching `.sha256`.
+- `-Installer` implies `-Publish` and is mutually exclusive with `-FrameworkDependent`. `tools\build-installer.ps1` can be called directly: `-SkipPublish` reuses an existing publish folder, `-IsccPath` selects ISCC.exe, and `-Version` overrides the version.
+- Pushing a `v*` tag or manually dispatching `.github/workflows/release.yml` strips the `v` prefix from the tag name (or the manual `version` input) and fails unless it equals `<Version>` in `Directory.Build.props`. The workflow then builds and tests, produces the installer and portable zip with their SHA256 files, and finally creates or updates the GitHub Release.
+- Release assets: `LightSwitch-<version>-setup.exe`, `LightSwitch-<version>-portable.zip`, and a `.sha256` for each.
 
 The self-contained build first runs `dotnet publish` to produce a framework-dependent folder, then `tools/bundle-dotnet-runtime.ps1`:
 

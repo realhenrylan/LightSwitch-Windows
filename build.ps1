@@ -13,6 +13,7 @@
     .\build.ps1 -Test
     .\build.ps1 -Publish
     .\build.ps1 -Publish -FrameworkDependent
+    .\build.ps1 -Publish -Installer
 #>
 [CmdletBinding()]
 param(
@@ -26,12 +27,23 @@ param(
     # Produce a smaller folder that requires the .NET 10 Desktop Runtime.
     [switch] $FrameworkDependent,
 
+    # Also compile artifacts\LightSwitch-<version>-setup.exe with Inno Setup.
+    [switch] $Installer,
+
     [string] $OutputDirectory
 )
 
 $ErrorActionPreference = 'Stop'
 $root = $PSScriptRoot
 Set-Location $root
+
+if ($Installer -and $FrameworkDependent) {
+    throw '-Installer requires the self-contained build; remove -FrameworkDependent.'
+}
+
+if ($Installer) {
+    $Publish = $true
+}
 
 $env:DOTNET_CLI_TELEMETRY_OPTOUT = '1'
 $env:DOTNET_NOLOGO = '1'
@@ -130,5 +142,16 @@ if ($Publish) {
     }
     else {
         Write-Host 'This build is portable: no .NET runtime installation is required.' -ForegroundColor Green
+    }
+
+    if ($Installer) {
+        Write-Host 'Building the setup executable ...' -ForegroundColor Cyan
+        $installerScript = Join-Path $root 'tools\build-installer.ps1'
+        & $installerScript -SkipPublish -Configuration $Configuration `
+            -PublishDirectory $output `
+            -OutputDirectory (Join-Path $root 'artifacts')
+        if ($LASTEXITCODE -ne 0) {
+            throw "Installer build failed (exit $LASTEXITCODE)."
+        }
     }
 }

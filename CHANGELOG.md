@@ -1,5 +1,24 @@
 # 变更日志
 
+## [v2.0.2] — 2026-11-01
+
+### 🎨 界面修复
+
+- **外观按钮选中反馈** — “浅色 / 深色 / 恢复自动”会用强调色标出当前生效的选项；手动切换后保持高亮，直到覆盖结束或点击“恢复自动”。引擎快照新增 `ManualLight`，系统主题未变化时选中状态也不会回跳。
+
+### 📦 Windows 安装包
+
+- **新增 Inno Setup 安装器** — `installer/LightSwitch.iss` 生成 `artifacts/LightSwitch-2.0.2-setup.exe`（约 43.5 MB，465 个文件）。按用户安装到 `%LOCALAPPDATA%\Programs\LightSwitch`，无需管理员权限；创建开始菜单快捷方式，可选桌面快捷方式。
+- **安装选项** — 默认勾选开机自启；安装器通过 `--enable-startup` 写入 HKCU Run 项。仅全新安装时应用该选项，覆盖升级不会改动用户在设置中的选择。
+- **卸载** — 注册为当前用户应用，可从“设置 → 应用”或开始菜单卸载；卸载前结束正在运行的 LightSwitch。默认保留 `%LOCALAPPDATA%\LightSwitch` 中的设置、日志和缓存，交互式卸载可选择一并删除；静默卸载不再弹窗，默认保留。
+- **中英文界面** — 安装向导优先显示简体中文，可切换 English；包含 Inno Setup 官方简体中文语言文件。
+- **安装包构建** — 新增 `build.ps1 -Installer` 与 `tools/build-installer.ps1`：复用 `-Publish` 输出，定位 ISCC.exe，校验 `LightSwitch.exe` 与语言文件，编译后输出 setup 和 SHA256。`-FrameworkDependent` 与 `-Installer` 互斥。
+- **命令行自启开关** — 新增 `--enable-startup` / `--disable-startup`，供安装器和脚本以一次性命令写入/删除自启项；失败时返回退出码 1。
+- **发布自动化** — 新增 `.github/workflows/release.yml`：推送 `v*` 标签或手动触发时，在 windows-latest 上构建、测试、生成安装包与便携版 zip，上传构建产物并创建/更新 GitHub Release。
+- **文档** — README 中英文增加安装版快速开始、安装包构建、卸载与 SmartScreen 说明；PLAN 更新分发进度。安装包暂未做代码签名。
+
+---
+
 ## [v2.0.1] — 2026-11-01
 
 ### 📦 默认自包含发布
