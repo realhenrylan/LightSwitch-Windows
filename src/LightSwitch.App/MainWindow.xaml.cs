@@ -43,6 +43,7 @@ public sealed partial class MainWindow : Window
 
         Title = "LightSwitch";
         AppWindow.Title = "LightSwitch";
+        TitleBarIcon.Source = LoadPreview(Path.Combine(AppContext.BaseDirectory, "Assets", "app.png"), 48);
 
         try
         {
@@ -181,7 +182,7 @@ public sealed partial class MainWindow : Window
     private static string FormatCoordinate(double value) =>
         double.IsNaN(value) ? string.Empty : value.ToString("0.####", CultureInfo.InvariantCulture);
 
-    private static BitmapImage? LoadPreview(string path)
+    private static BitmapImage? LoadPreview(string path, int decodePixelWidth = 160)
     {
         try
         {
@@ -192,7 +193,7 @@ public sealed partial class MainWindow : Window
 
             return new BitmapImage
             {
-                DecodePixelWidth = 160,
+                DecodePixelWidth = decodePixelWidth,
                 UriSource = new Uri(path),
             };
         }

@@ -22,10 +22,7 @@
             </Grid.ColumnDefinitions>
 
             <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
-                <Border Width="24" Height="24" CornerRadius="6"
-                        Background="{ThemeResource AccentFillColorDefaultBrush}">
-                    <FontIcon Glyph="&#xE706;" FontSize="12" Foreground="White" />
-                </Border>
+                <Image x:Name="TitleBarIcon" Width="24" Height="24" />
                 <TextBlock Text="LightSwitch" FontWeight="SemiBold" VerticalAlignment="Center" />
             </StackPanel>
 
