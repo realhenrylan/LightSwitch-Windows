@@ -4,6 +4,9 @@ namespace LightSwitch.Tests;
 
 public class AppearanceEngineTests
 {
+    private static readonly TimeZoneInfo Beijing =
+        TimeZoneInfo.CreateCustomTimeZone("Test/UTC+8", TimeSpan.FromHours(8), "UTC+8", "UTC+8");
+
     [Fact]
     public void FixedHours_AppliesThemeOnlyAtBoundaries()
     {
@@ -211,7 +214,7 @@ public class AppearanceEngineTests
             Longitude = "116.4",
             SunriseOffset = 30,
             SunsetOffset = -30,
-        });
+        }, Beijing);
 
         engine.Evaluate(EvaluationTrigger.Startup);
         Assert.NotNull(engine.State.SunTimes);
@@ -221,11 +224,11 @@ public class AppearanceEngineTests
     }
 
     private static (AppearanceEngine Engine, FakeWallpaper Wallpaper, FakeTheme Theme, FakeNightLight NightLight)
-        Create(FakeClock clock, FakeTheme theme, AppSettings settings)
+        Create(FakeClock clock, FakeTheme theme, AppSettings settings, TimeZoneInfo? timeZone = null)
     {
         var wallpaper = new FakeWallpaper();
         var nightLight = new FakeNightLight();
-        var engine = new AppearanceEngine(settings, theme, nightLight, wallpaper, clock);
+        var engine = new AppearanceEngine(settings, theme, nightLight, wallpaper, clock, timeZone);
         return (engine, wallpaper, theme, nightLight);
     }
 

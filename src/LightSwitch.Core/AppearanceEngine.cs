@@ -12,6 +12,7 @@ public sealed class AppearanceEngine
     private readonly INightLightService _nightLight;
     private readonly IWallpaperService _wallpaper;
     private readonly IClock _clock;
+    private readonly TimeZoneInfo _timeZone;
 
     private AppSettings _settings;
     private EngineState _state;
@@ -28,7 +29,8 @@ public sealed class AppearanceEngine
         IThemeService theme,
         INightLightService nightLight,
         IWallpaperService wallpaper,
-        IClock? clock = null)
+        IClock? clock = null,
+        TimeZoneInfo? timeZone = null)
     {
         _settings = settings.Clone();
         _settings.Normalize();
@@ -36,6 +38,7 @@ public sealed class AppearanceEngine
         _nightLight = nightLight;
         _wallpaper = wallpaper;
         _clock = clock ?? new SystemClock();
+        _timeZone = timeZone ?? TimeZoneInfo.Local;
 
         _targetLight = _theme.GetSystemLight() ?? _theme.GetAppsLight() ?? false;
         _state = BuildState(_clock.Now);
@@ -313,7 +316,7 @@ public sealed class AppearanceEngine
             return;
         }
 
-        var calculated = SunCalculator.Calculate(now.Date, latitude, longitude, TimeZoneInfo.Local);
+        var calculated = SunCalculator.Calculate(now.Date, latitude, longitude, _timeZone);
         if (calculated is null)
         {
             _lastError = "当前日期该纬度没有日出或日落（极昼/极夜），已临时使用 06:00 / 18:00。";
