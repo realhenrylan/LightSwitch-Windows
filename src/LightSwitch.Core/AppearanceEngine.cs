@@ -24,9 +24,10 @@ public sealed class AppearanceEngine
     private string? _lastError;
     private string? _lastAction;
 
-    // BroadcastThemeChanged is delivered synchronously, so our own tray window
-    // can call Evaluate while _gate is still held by this thread. Those requests
-    // are deferred and replayed once the outer operation has finished.
+    // WM_SETTINGCHANGE can be delivered synchronously (other processes broadcast
+    // it, and the one-shot CLI path sends it inline), so our own tray window can
+    // call Evaluate while _gate is still held by this thread. Those requests are
+    // deferred and replayed once the outer operation has finished.
     private const int MaxReentrantPasses = 3;
     private int _reentrantRequest;
 

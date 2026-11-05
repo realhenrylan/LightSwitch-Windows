@@ -71,15 +71,76 @@ public sealed class ThemeService : IThemeService
         }
     }
 
+    // SendMessageTimeout can block for up to five seconds per message when one
+    // of the top-level windows is hung, so broadcasts never run on the caller's
+    // thread. A serial background pump keeps the trio in order, and a burst of
+    // requests collapses into one extra broadcast.
+    private readonly SemaphoreSlim _broadcastGate = new(1, 1);
+    private int _broadcastRequested;
+
     public void BroadcastThemeChanged()
     {
-        // Explorer, DWM and open apps all key off different messages; send the same trio as the C++ build.
-        SendMessageTimeout(HwndBroadcast, WmSettingChange, IntPtr.Zero, "ImmersiveColorSet",
-            SmtoAbortIfHung, SendTimeoutMs, out _);
-        SendMessageTimeout(HwndBroadcast, WmThemeChanged, IntPtr.Zero, IntPtr.Zero,
-            SmtoAbortIfHung, SendTimeoutMs, out _);
-        SendMessageTimeout(HwndBroadcast, WmDwmColorizationColorChanged, IntPtr.Zero, IntPtr.Zero,
-            SmtoAbortIfHung, SendTimeoutMs, out _);
+        if (Interlocked.Exchange(ref _broadcastRequested, 1) == 1)
+        {
+            // The queued pump will send the messages after this request's
+            // registry writes, so dropping the duplicate is safe.
+            return;
+        }
+
+        _ = Task.Run(PumpBroadcastAsync);
+    }
+
+    /// <summary>
+    /// Synchronous broadcast for one-shot callers (the --light/--dark CLI) that
+    /// exit immediately and cannot wait for the background pump.
+    /// </summary>
+    public void BroadcastThemeChangedSync()
+    {
+        _broadcastGate.Wait();
+        try
+        {
+            SendThemeMessages();
+        }
+        finally
+        {
+            _broadcastGate.Release();
+        }
+    }
+
+    private async Task PumpBroadcastAsync()
+    {
+        await _broadcastGate.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            // Send once, then once more if another request arrived while the
+            // first trio was in flight (the registry already holds its value).
+            while (Interlocked.Exchange(ref _broadcastRequested, 0) == 1)
+            {
+                SendThemeMessages();
+            }
+        }
+        finally
+        {
+            _broadcastGate.Release();
+        }
+    }
+
+    private static void SendThemeMessages()
+    {
+        try
+        {
+            // Explorer, DWM and open apps all key off different messages; send the same trio as the C++ build.
+            SendMessageTimeout(HwndBroadcast, WmSettingChange, IntPtr.Zero, "ImmersiveColorSet",
+                SmtoAbortIfHung, SendTimeoutMs, out _);
+            SendMessageTimeout(HwndBroadcast, WmThemeChanged, IntPtr.Zero, IntPtr.Zero,
+                SmtoAbortIfHung, SendTimeoutMs, out _);
+            SendMessageTimeout(HwndBroadcast, WmDwmColorizationColorChanged, IntPtr.Zero, IntPtr.Zero,
+                SmtoAbortIfHung, SendTimeoutMs, out _);
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"Theme broadcast failed: {ex.Message}");
+        }
     }
 
     private static int? ReadDword(string name)

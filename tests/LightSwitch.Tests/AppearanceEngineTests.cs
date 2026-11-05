@@ -95,9 +95,9 @@ public class AppearanceEngineTests
         engine.Evaluate(EvaluationTrigger.Startup);
         Assert.False(theme.SystemLight);
 
-        // The real BroadcastThemeChanged is synchronous: our own tray window
-        // procedure receives WM_SETTINGCHANGE and asks the engine to evaluate
-        // again while ManualApply is still running.
+        // Mimic a synchronous WM_SETTINGCHANGE broadcast: the tray window
+        // procedure asks the engine to evaluate again while ManualApply is
+        // still running.
         theme.OnBroadcast = () => engine.Evaluate(EvaluationTrigger.SystemEvent);
         engine.ManualApply(true);
 

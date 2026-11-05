@@ -257,9 +257,10 @@ public sealed class AppHost
     }
 
     /// <summary>
-    /// WM_SETTINGCHANGE is delivered synchronously by SendMessageTimeout, so the
-    /// tray window procedure is re-entered in the middle of our own ApplyTheme.
-    /// Evaluate later instead: the manual override is in place by then.
+    /// WM_SETTINGCHANGE arrives from the background broadcast pump and from
+    /// other processes. Coalesce a burst of messages through a short timer so a
+    /// single theme change does not trigger several evaluations, and so the
+    /// tray window procedure never runs business logic inline.
     /// </summary>
     private void OnSystemChanged()
     {

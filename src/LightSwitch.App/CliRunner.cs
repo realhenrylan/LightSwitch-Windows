@@ -78,7 +78,7 @@ internal static class CliRunner
 
             theme.SetSystemLight(light);
             theme.SetAppsLight(light);
-            theme.BroadcastThemeChanged();
+            theme.BroadcastThemeChangedSync();
 
             if (settings.ChangeWallpaper)
             {
