@@ -114,6 +114,117 @@ public class AppearanceEngineTests
     }
 
     [Fact]
+    public void ApplySettings_UnrelatedChange_KeepsManualOverride()
+    {
+        var clock = new FakeClock(new DateTime(2026, 11, 1, 21, 0, 0));   // The schedule asks for dark.
+        var theme = new FakeTheme();
+        var settings = new AppSettings
+        {
+            ScheduleMode = ScheduleMode.FixedHours,
+            LightTime = 8 * 60,
+            DarkTime = 20 * 60,
+        };
+        var (engine, _, _, _) = Create(clock, theme, settings);
+
+        engine.Evaluate(EvaluationTrigger.Startup);
+        engine.ManualApply(true);
+        Assert.True(engine.State.IsManualOverride);
+
+        // Toggling options that have nothing to do with the schedule must not
+        // silently drop the user's manual choice.
+        var updated = settings.Clone();
+        updated.HotkeyEnabled = false;
+        updated.CloseToTray = false;
+        engine.ApplySettings(updated);
+
+        Assert.True(engine.State.IsManualOverride);
+        Assert.True(engine.State.ManualLight);
+        Assert.True(engine.State.IsLightTarget);
+        Assert.True(theme.SystemLight);
+        Assert.True(theme.AppsLight);
+    }
+
+    [Fact]
+    public void ApplySettings_ScheduleChange_ClearsManualOverride()
+    {
+        var clock = new FakeClock(new DateTime(2026, 11, 1, 21, 0, 0));
+        var theme = new FakeTheme();
+        var settings = new AppSettings
+        {
+            ScheduleMode = ScheduleMode.FixedHours,
+            LightTime = 8 * 60,
+            DarkTime = 20 * 60,
+        };
+        var (engine, _, _, _) = Create(clock, theme, settings);
+
+        engine.Evaluate(EvaluationTrigger.Startup);
+        engine.ManualApply(true);
+        Assert.True(engine.State.IsManualOverride);
+
+        var updated = settings.Clone();
+        updated.DarkTime = 19 * 60;   // The schedule itself moved.
+        engine.ApplySettings(updated);
+
+        Assert.False(engine.State.IsManualOverride);
+        Assert.Null(engine.State.ManualUntil);
+        Assert.Null(engine.State.ManualLight);
+        Assert.False(engine.State.IsLightTarget);
+        Assert.False(theme.SystemLight);
+    }
+
+    [Fact]
+    public void ManualOverride_WallpaperPathChange_AppliesManualSide()
+    {
+        var lightImage = Path.Combine(Path.GetTempPath(), $"LightSwitch-light-{Guid.NewGuid():N}.png");
+        var lightImage2 = Path.Combine(Path.GetTempPath(), $"LightSwitch-light2-{Guid.NewGuid():N}.png");
+        var darkImage = Path.Combine(Path.GetTempPath(), $"LightSwitch-dark-{Guid.NewGuid():N}.png");
+        File.WriteAllBytes(lightImage, new byte[] { 0x89, 0x50, 0x4E, 0x47 });
+        File.WriteAllBytes(lightImage2, new byte[] { 0x89, 0x50, 0x4E, 0x47 });
+        File.WriteAllBytes(darkImage, new byte[] { 0x89, 0x50, 0x4E, 0x47 });
+
+        try
+        {
+            var clock = new FakeClock(new DateTime(2026, 11, 1, 21, 0, 0));
+            var theme = new FakeTheme();
+            var wallpaper = new FakeWallpaper();
+            var settings = new AppSettings
+            {
+                ScheduleMode = ScheduleMode.FixedHours,
+                LightTime = 8 * 60,
+                DarkTime = 20 * 60,
+                ChangeWallpaper = true,
+                LightWallpaper = lightImage,
+                DarkWallpaper = darkImage,
+            };
+            var engine = new AppearanceEngine(settings, theme, new FakeNightLight(), wallpaper, clock);
+
+            engine.Evaluate(EvaluationTrigger.Startup);
+            Assert.Equal(darkImage, wallpaper.Path);
+
+            engine.ManualApply(true);
+            Assert.Equal(lightImage, wallpaper.Path);
+            Assert.True(engine.State.IsManualOverride);
+            var appliesBefore = wallpaper.Applies;
+
+            // Editing the wallpaper is not a schedule change, so the override
+            // stays and the new light image replaces the manual side.
+            var updated = settings.Clone();
+            updated.LightWallpaper = lightImage2;
+            engine.ApplySettings(updated);
+
+            Assert.True(engine.State.IsManualOverride);
+            Assert.Equal(lightImage2, wallpaper.Path);
+            Assert.Equal(appliesBefore + 1, wallpaper.Applies);
+        }
+        finally
+        {
+            File.Delete(lightImage);
+            File.Delete(lightImage2);
+            File.Delete(darkImage);
+        }
+    }
+
+    [Fact]
     public void ManualApply_KeepsTheChosenAppearanceWhenThemeTargetsAreDisabled()
     {
         var clock = new FakeClock(new DateTime(2026, 11, 1, 21, 0, 0));

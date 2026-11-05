@@ -68,11 +68,18 @@ public sealed class AppearanceEngine
         EngineState state;
         lock (_gate)
         {
-            _settings = settings.Clone();
-            _settings.Normalize();
-            _manualUntil = null;
-            _manualLight = null;
-            _sunDate = default;
+            var next = settings.Clone();
+            next.Normalize();
+            if (ScheduleChanged(_settings, next))
+            {
+                // Only a change that moves the schedule invalidates a manual
+                // choice; toggling the hotkey or the tray options must not undo it.
+                _manualUntil = null;
+                _manualLight = null;
+                _sunDate = default;
+            }
+
+            _settings = next;
             state = evaluate ? EvaluateLocked(EvaluationTrigger.SettingsChanged) : BuildState(_clock.Now);
             _state = state;
         }
@@ -80,6 +87,15 @@ public sealed class AppearanceEngine
         PublishIfChanged(state);
         FlushReentrant();
     }
+
+    private static bool ScheduleChanged(AppSettings a, AppSettings b) =>
+        a.ScheduleMode != b.ScheduleMode ||
+        a.LightTime != b.LightTime ||
+        a.DarkTime != b.DarkTime ||
+        a.SunriseOffset != b.SunriseOffset ||
+        a.SunsetOffset != b.SunsetOffset ||
+        !string.Equals(a.Latitude, b.Latitude, StringComparison.Ordinal) ||
+        !string.Equals(a.Longitude, b.Longitude, StringComparison.Ordinal);
 
     public void Evaluate(EvaluationTrigger trigger)
     {
@@ -237,6 +253,13 @@ public sealed class AppearanceEngine
             if (now < until)
             {
                 _targetLight = _theme.GetSystemLight() ?? _targetLight;
+                if (_manualLight is { } manual)
+                {
+                    // A wallpaper path/position edit during the override must still
+                    // reach the manually chosen side; Matches dedupes when nothing changed.
+                    ApplyWallpaper(manual, force: false);
+                }
+
                 _state = BuildState(now);
                 return _state;
             }
