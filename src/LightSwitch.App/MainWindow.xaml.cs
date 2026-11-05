@@ -3,6 +3,7 @@ using System.IO;
 using LightSwitch.Core;
 using Microsoft.UI;
 using Microsoft.UI.Composition.SystemBackdrops;
+using Microsoft.UI.Dispatching;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
@@ -20,6 +21,7 @@ public sealed partial class MainWindow : Window
     private AppSettings _edit;
     private bool _initializing;
     private string? _lastError;
+    private DispatcherQueueTimer? _commitTimer;
 
     public MainWindow(AppHost host)
     {
@@ -218,6 +220,37 @@ public sealed partial class MainWindow : Window
         UpdateState(_host.Engine.State);
     }
 
+    /// <summary>
+    /// Time pickers and number boxes fire once per interaction, and each commit
+    /// saves the file and runs a full evaluation. Coalesce them into one commit
+    /// so dragging a number box does not produce a burst of evaluations.
+    /// </summary>
+    private void ScheduleCommit()
+    {
+        _commitTimer ??= CreateCommitTimer();
+        _commitTimer.Stop();   // Restart: only the last change in the window lands.
+        _commitTimer.Start();
+    }
+
+    private DispatcherQueueTimer CreateCommitTimer()
+    {
+        var timer = DispatcherQueue.CreateTimer();
+        timer.Interval = TimeSpan.FromMilliseconds(400);
+        timer.IsRepeating = false;
+        timer.Tick += (_, _) => Commit();
+        return timer;
+    }
+
+    /// <summary>Applies a still-pending debounced edit before an action that needs it.</summary>
+    private void FlushPendingCommit()
+    {
+        if (_commitTimer?.IsRunning == true)
+        {
+            _commitTimer.Stop();
+            Commit();
+        }
+    }
+
     private void OnHostStateUpdated(EngineState state)
     {
         void Apply()
@@ -377,6 +410,8 @@ public sealed partial class MainWindow : Window
 
     private void OnClosed(object sender, WindowEventArgs args)
     {
+        // Persist any debounced edit before the window goes away.
+        FlushPendingCommit();
         _host.StateUpdated -= OnHostStateUpdated;
     }
 
@@ -412,7 +447,7 @@ public sealed partial class MainWindow : Window
             _edit.DarkTime = minutes;
         }
 
-        Commit();
+        ScheduleCommit();
     }
 
     private void OnLocationChanged(NumberBox sender, NumberBoxValueChangedEventArgs args)
@@ -426,7 +461,7 @@ public sealed partial class MainWindow : Window
         _edit.Longitude = FormatCoordinate(LongitudeBox.Value);
         _edit.SunriseOffset = ToInt(SunriseOffsetBox.Value);
         _edit.SunsetOffset = ToInt(SunsetOffsetBox.Value);
-        Commit();
+        ScheduleCommit();
     }
 
     private static int ToInt(double value) =>
@@ -580,6 +615,8 @@ public sealed partial class MainWindow : Window
 
     private void ApplyWallpaperPreview(bool light, string path)
     {
+        FlushPendingCommit();
+
         if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
         {
             ShowMessage("没有可用的壁纸", "请先选择一张图片。", InfoBarSeverity.Warning);
@@ -597,11 +634,24 @@ public sealed partial class MainWindow : Window
         _host.ApplyWallpaperPreview(light);
     }
 
-    private void OnLightClick(object sender, RoutedEventArgs e) => _host.ManualApply(true);
+    private void OnLightClick(object sender, RoutedEventArgs e)
+    {
+        // The engine reads the saved settings, so a pending edit must land first.
+        FlushPendingCommit();
+        _host.ManualApply(true);
+    }
 
-    private void OnDarkClick(object sender, RoutedEventArgs e) => _host.ManualApply(false);
+    private void OnDarkClick(object sender, RoutedEventArgs e)
+    {
+        FlushPendingCommit();
+        _host.ManualApply(false);
+    }
 
-    private void OnRestoreAutoClick(object sender, RoutedEventArgs e) => _host.RestoreAutomatic();
+    private void OnRestoreAutoClick(object sender, RoutedEventArgs e)
+    {
+        FlushPendingCommit();
+        _host.RestoreAutomatic();
+    }
 
     private void OnOpenDataFolderClick(object sender, RoutedEventArgs e) => _host.OpenDataFolder();
 
