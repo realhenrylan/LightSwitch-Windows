@@ -62,7 +62,7 @@ public class SettingsServiceTests
                 Longitude = "121.47",
             };
 
-            Assert.True(service.Save(settings));
+            Assert.Equal(SaveResult.Saved, service.Save(settings));
 
             var reloaded = new SettingsService(path).Load();
             Assert.True(reloaded.ChangeWallpaper);
@@ -75,6 +75,54 @@ public class SettingsServiceTests
         finally
         {
             File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void Save_WhenContentIsUnchanged_ReturnsUnchanged()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"LightSwitch-test-{Guid.NewGuid():N}.json");
+        try
+        {
+            var service = new SettingsService(path);
+            var settings = new AppSettings
+            {
+                ScheduleMode = ScheduleMode.FixedHours,
+                LightTime = 420,
+            };
+
+            Assert.Equal(SaveResult.Saved, service.Save(settings));
+            Assert.Equal(SaveResult.Unchanged, service.Save(settings.Clone()));
+            Assert.Null(service.LastError);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void Save_WhenTheTargetCannotBeReplaced_ReturnsFailed()
+    {
+        // Point the config path at a directory: the temp file can be written but
+        // can never replace the target, which is exactly the "write failed" path.
+        var path = Path.Combine(Path.GetTempPath(), $"LightSwitch-dir-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(path);
+        try
+        {
+            var service = new SettingsService(path);
+            var result = service.Save(new AppSettings
+            {
+                ScheduleMode = ScheduleMode.FixedHours,
+            });
+
+            Assert.Equal(SaveResult.Failed, result);
+            Assert.NotNull(service.LastError);
+        }
+        finally
+        {
+            File.Delete(path + ".tmp");
+            Directory.Delete(path, recursive: false);
         }
     }
 

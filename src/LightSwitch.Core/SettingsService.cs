@@ -5,6 +5,14 @@ using System.Text.Json.Serialization;
 
 namespace LightSwitch.Core;
 
+/// <summary>Outcome of <see cref="SettingsService.Save"/>: a no-op save is not a failure.</summary>
+public enum SaveResult
+{
+    Saved,
+    Unchanged,
+    Failed,
+}
+
 /// <summary>
 /// Loads and atomically saves <see cref="AppSettings"/>.
 /// Also imports the config.json that the original standalone build kept next
@@ -69,7 +77,7 @@ public sealed class SettingsService
                 Log.Info($"Imported legacy configuration from {source}");
                 // Complete the migration so the next launch uses the new location even
                 // when the user never changes a setting.
-                if (!Save(Current))
+                if (Save(Current) == SaveResult.Unchanged)
                 {
                     LastJson = null;
                     Save(Current);
@@ -89,15 +97,19 @@ public sealed class SettingsService
         }
     }
 
-    /// <summary>Serializes and writes atomically. Returns false when the content did not change.</summary>
-    public bool Save(AppSettings settings)
+    /// <summary>
+    /// Serializes and writes atomically. <see cref="SaveResult.Unchanged"/> means the
+    /// file already matched the settings; only <see cref="SaveResult.Failed"/> is an error.
+    /// </summary>
+    public SaveResult Save(AppSettings settings)
     {
         settings.Normalize();
         var json = JsonSerializer.Serialize(settings, JsonOptions);
         if (string.Equals(json, LastJson, StringComparison.Ordinal))
         {
             Current = settings;
-            return false;
+            LastError = null;
+            return SaveResult.Unchanged;
         }
 
         var directory = Path.GetDirectoryName(ConfigPath);
@@ -107,29 +119,37 @@ public sealed class SettingsService
         }
 
         var temp = ConfigPath + ".tmp";
-        try
+        // Antivirus scanners and sync clients may briefly lock the file: retry a
+        // few times, but never fall back to a non-atomic direct write.
+        for (var attempt = 1; ; attempt++)
         {
-            File.WriteAllText(temp, json, new UTF8Encoding(false));
-            File.Move(temp, ConfigPath, overwrite: true);
-            LastJson = json;
-            Current = settings;
-            LastError = null;
-            return true;
-        }
-        catch (Exception ex)
-        {
-            LastError = $"无法保存配置文件：{ex.Message}";
-            Log.Error($"Failed to write {ConfigPath}", ex);
             try
             {
-                File.WriteAllText(ConfigPath, json, new UTF8Encoding(false));
+                File.WriteAllText(temp, json, new UTF8Encoding(false));
+                File.Move(temp, ConfigPath, overwrite: true);
                 LastJson = json;
                 Current = settings;
-                return true;
+                LastError = null;
+                return SaveResult.Saved;
             }
-            catch
+            catch (IOException) when (attempt < 3)
             {
-                return false;
+                Thread.Sleep(50 * attempt);
+            }
+            catch (Exception ex)
+            {
+                LastError = $"无法保存配置文件：{ex.Message}";
+                Log.Error($"Failed to write {ConfigPath}", ex);
+                try
+                {
+                    File.Delete(temp);
+                }
+                catch
+                {
+                    // Best effort only.
+                }
+
+                return SaveResult.Failed;
             }
         }
     }

@@ -147,7 +147,7 @@ public sealed class AppHost
             settings.Normalize();
             var previousStartup = Settings.RunAtStartup;
 
-            if (!_settingsService.Save(settings))
+            if (_settingsService.Save(settings) == SaveResult.Failed)
             {
                 return _settingsService.LastError ?? "无法保存设置。";
             }
