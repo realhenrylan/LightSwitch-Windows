@@ -302,8 +302,16 @@ public sealed class AppearanceEngine
             : "外观已是最新";
 
         _state = BuildState(now);
-        Log.Info($"Evaluated {trigger}: {settings.ScheduleMode}, target={(shouldBeLight ? "light" : "dark")}, " +
-                 $"themeChanged={themeChanged}, wallpaperChanged={wallpaperChanged}");
+
+        // The 30 s timer evaluates even when nothing changed; logging every one of
+        // those lines rotated the 512 KB log in under a day. Keep the ones that
+        // carry information: a changed result or a non-timer trigger.
+        if (trigger != EvaluationTrigger.Timer || themeChanged || wallpaperChanged)
+        {
+            Log.Info($"Evaluated {trigger}: {settings.ScheduleMode}, target={(shouldBeLight ? "light" : "dark")}, " +
+                     $"themeChanged={themeChanged}, wallpaperChanged={wallpaperChanged}");
+        }
+
         return _state;
     }
 
