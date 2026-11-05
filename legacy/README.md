@@ -13,7 +13,7 @@ v2.0.0 已用 C# + WinUI 3 + Windows App SDK + Fluent Design 重写，功能、�
 | `LightSwitch.vcxproj` | v1 的 MSBuild 工程（C++17，x64） |
 | `LightSwitch.rc` | v1 的图标与版本资源 |
 | `build.bat` / `install.bat` | v1 的构建、注册开机自启脚本 |
-| `PLAN-v1.md` | v1 的设计与实施记录 |
+| `PLAN-v1.md` | v1 的设计与实施记录（仅本地保留，不纳入版本库） |
 
 ## 构建 v1（可选）
 

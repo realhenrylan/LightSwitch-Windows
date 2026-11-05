@@ -33,3 +33,8 @@ Thumbs.db
 desktop.ini
 .DS_Store
 .idea/
+
+# Planning / design notes stay local; they are working documents, not project files
+PLAN*.md
+docs/recommendations.md
+docs/solutions.md
