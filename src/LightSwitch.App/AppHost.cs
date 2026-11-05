@@ -21,6 +21,7 @@ public sealed class AppHost
     private readonly StartupService _startupService;
     private readonly NightLightWatcher _nightLightWatcher;
     private readonly DispatcherQueueTimer _timer;
+    private readonly DispatcherQueueTimer _systemEventDebounce;
     private readonly bool _startHidden;
 
     private TrayHost? _tray;
@@ -47,6 +48,13 @@ public sealed class AppHost
         _nightLightWatcher = new NightLightWatcher();
         _timer = _dispatcher.CreateTimer();
         _timer.Interval = TimeSpan.FromSeconds(30);
+
+        // Coalesce system notifications: a single theme change makes Explorer,
+        // DWM and our own broadcast send several WM_SETTINGCHANGE messages.
+        _systemEventDebounce = _dispatcher.CreateTimer();
+        _systemEventDebounce.Interval = TimeSpan.FromMilliseconds(500);
+        _systemEventDebounce.IsRepeating = false;
+        _systemEventDebounce.Tick += OnSystemEventDebounceTick;
 
         _startHidden = args.Any(a =>
             a.Equals("--startup", StringComparison.OrdinalIgnoreCase) ||
@@ -76,7 +84,7 @@ public sealed class AppHost
         _tray.DarkRequested += () => Engine.ManualApply(false);
         _tray.AutoToggleRequested += ToggleAutoSchedule;
         _tray.ExitRequested += Exit;
-        _tray.SystemChanged += () => Engine.Evaluate(EvaluationTrigger.SystemEvent);
+        _tray.SystemChanged += OnSystemChanged;
         _tray.Create("LightSwitch");
         _tray.SetHotkey(Settings.HotkeyEnabled);
 
@@ -208,6 +216,7 @@ public sealed class AppHost
         try
         {
             _timer.Stop();
+            _systemEventDebounce.Stop();
             Engine.StateChanged -= OnStateChanged;
             _nightLightWatcher.Changed -= OnNightLightChanged;
             _nightLightWatcher.Dispose();
@@ -244,6 +253,25 @@ public sealed class AppHost
         if (!_exiting)
         {
             Engine.Evaluate(EvaluationTrigger.Timer);
+        }
+    }
+
+    /// <summary>
+    /// WM_SETTINGCHANGE is delivered synchronously by SendMessageTimeout, so the
+    /// tray window procedure is re-entered in the middle of our own ApplyTheme.
+    /// Evaluate later instead: the manual override is in place by then.
+    /// </summary>
+    private void OnSystemChanged()
+    {
+        _systemEventDebounce.Stop();   // Restart: several messages coalesce into one evaluation.
+        _systemEventDebounce.Start();
+    }
+
+    private void OnSystemEventDebounceTick(DispatcherQueueTimer sender, object args)
+    {
+        if (!_exiting)
+        {
+            Engine.Evaluate(EvaluationTrigger.SystemEvent);
         }
     }
 

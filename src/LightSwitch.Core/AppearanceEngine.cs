@@ -24,6 +24,12 @@ public sealed class AppearanceEngine
     private string? _lastError;
     private string? _lastAction;
 
+    // BroadcastThemeChanged is delivered synchronously, so our own tray window
+    // can call Evaluate while _gate is still held by this thread. Those requests
+    // are deferred and replayed once the outer operation has finished.
+    private const int MaxReentrantPasses = 3;
+    private int _reentrantRequest;
+
     public AppearanceEngine(
         AppSettings settings,
         IThemeService theme,
@@ -72,9 +78,21 @@ public sealed class AppearanceEngine
         }
 
         PublishIfChanged(state);
+        FlushReentrant();
     }
 
     public void Evaluate(EvaluationTrigger trigger)
+    {
+        if (TryDeferReentrant(trigger))
+        {
+            return;
+        }
+
+        EvaluateAndPublish(trigger);
+        FlushReentrant();
+    }
+
+    private void EvaluateAndPublish(EvaluationTrigger trigger)
     {
         EngineState state;
         lock (_gate)
@@ -83,6 +101,39 @@ public sealed class AppearanceEngine
         }
 
         PublishIfChanged(state);
+    }
+
+    /// <summary>
+    /// Detects a callback that arrives while this thread still holds the gate -
+    /// our own <see cref="ApplyTheme"/> broadcast re-entering the engine - and
+    /// defers it instead of evaluating in the middle of the current operation.
+    /// </summary>
+    private bool TryDeferReentrant(EvaluationTrigger trigger)
+    {
+        if (!Monitor.IsEntered(_gate))
+        {
+            return false;
+        }
+
+        Interlocked.Exchange(ref _reentrantRequest, 1);
+        Log.Info($"Deferred re-entrant evaluation ({trigger})");
+        return true;
+    }
+
+    /// <summary>Replays a deferred request now that the outer operation is complete.</summary>
+    private void FlushReentrant()
+    {
+        for (var pass = 0; pass < MaxReentrantPasses; pass++)
+        {
+            if (Interlocked.Exchange(ref _reentrantRequest, 0) == 0)
+            {
+                return;
+            }
+
+            EvaluateAndPublish(EvaluationTrigger.SystemEvent);
+        }
+
+        Interlocked.Exchange(ref _reentrantRequest, 0);
     }
 
     /// <summary>Applies one appearance immediately and pauses automatic changes until the next boundary.</summary>
@@ -96,15 +147,18 @@ public sealed class AppearanceEngine
             _lastAction = null;
             EnsureSunTimes(now);
             var (lightTime, darkTime) = EffectiveTimes();
+
+            // Establish the override before applying anything: the theme
+            // broadcast inside ApplyTheme is delivered synchronously and can
+            // call straight back into Evaluate.
             _targetLight = light;
             _manualLight = light;
-
-            ApplyTheme(light, respectTargetFlags: true);
-            ApplyWallpaper(light);
-
             _manualUntil = _settings.ScheduleMode is ScheduleMode.FixedHours or ScheduleMode.SunsetToSunrise
                 ? ScheduleMath.NextBoundary(now, lightTime, darkTime)
                 : null;
+
+            ApplyTheme(light, respectTargetFlags: true);
+            ApplyWallpaper(light);
 
             _lastAction = light ? "已手动切换到浅色外观" : "已手动切换到深色外观";
             Log.Info($"Manual appearance applied: {(light ? "light" : "dark")}; override until {_manualUntil?.ToString("yyyy-MM-dd HH:mm") ?? "n/a"}");
@@ -113,6 +167,7 @@ public sealed class AppearanceEngine
         }
 
         PublishIfChanged(state);
+        FlushReentrant();
     }
 
     public void ManualToggle()
@@ -136,6 +191,7 @@ public sealed class AppearanceEngine
         }
 
         PublishIfChanged(state);
+        FlushReentrant();
     }
 
     public void ClearManualOverride()
@@ -150,6 +206,7 @@ public sealed class AppearanceEngine
         }
 
         PublishIfChanged(state);
+        FlushReentrant();
     }
 
     /// <summary>Recomputes the snapshot without changing anything.</summary>

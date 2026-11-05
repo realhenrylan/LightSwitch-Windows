@@ -81,6 +81,39 @@ public class AppearanceEngineTests
     }
 
     [Fact]
+    public void ManualApply_SurvivesReentrantEvaluateFromBroadcast()
+    {
+        var clock = new FakeClock(new DateTime(2026, 11, 1, 21, 0, 0));   // The schedule asks for dark.
+        var theme = new FakeTheme();
+        var (engine, _, _, _) = Create(clock, theme, new AppSettings
+        {
+            ScheduleMode = ScheduleMode.FixedHours,
+            LightTime = 8 * 60,
+            DarkTime = 20 * 60,
+        });
+
+        engine.Evaluate(EvaluationTrigger.Startup);
+        Assert.False(theme.SystemLight);
+
+        // The real BroadcastThemeChanged is synchronous: our own tray window
+        // procedure receives WM_SETTINGCHANGE and asks the engine to evaluate
+        // again while ManualApply is still running.
+        theme.OnBroadcast = () => engine.Evaluate(EvaluationTrigger.SystemEvent);
+        engine.ManualApply(true);
+
+        Assert.True(theme.SystemLight);
+        Assert.True(theme.AppsLight);
+        Assert.True(engine.State.IsManualOverride);
+        Assert.True(engine.State.ManualLight);
+
+        // The override keeps holding after the nested request has been replayed.
+        clock.Now = new DateTime(2026, 11, 1, 23, 0, 0);
+        engine.Evaluate(EvaluationTrigger.Timer);
+        Assert.True(theme.SystemLight);
+        Assert.True(engine.State.IsManualOverride);
+    }
+
+    [Fact]
     public void ManualApply_KeepsTheChosenAppearanceWhenThemeTargetsAreDisabled()
     {
         var clock = new FakeClock(new DateTime(2026, 11, 1, 21, 0, 0));
@@ -247,6 +280,9 @@ public class AppearanceEngineTests
         public int SetAppsCalls { get; private set; }
         public int Broadcasts { get; private set; }
 
+        /// <summary>Simulates the synchronous WM_SETTINGCHANGE loop back into the tray.</summary>
+        public Action? OnBroadcast { get; set; }
+
         public bool? GetSystemLight() => SystemLight;
 
         public bool? GetAppsLight() => AppsLight;
@@ -265,7 +301,11 @@ public class AppearanceEngineTests
             return true;
         }
 
-        public void BroadcastThemeChanged() => Broadcasts++;
+        public void BroadcastThemeChanged()
+        {
+            Broadcasts++;
+            OnBroadcast?.Invoke();
+        }
     }
 
     private sealed class FakeNightLight : INightLightService
