@@ -31,9 +31,6 @@
                 <Setter Property="Margin" Value="0,2,0,0" />
             </Style>
 
-            <Style x:Key="AppearanceSelectedButtonStyle" TargetType="Button"
-                   BasedOn="{StaticResource AccentButtonStyle}" />
-
             <Style x:Key="FieldSeparatorStyle" TargetType="Border">
                 <Setter Property="BorderBrush" Value="{ThemeResource DividerStrokeColorDefaultBrush}" />
                 <Setter Property="BorderThickness" Value="0,0,0,1" />

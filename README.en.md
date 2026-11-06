@@ -25,6 +25,7 @@ LightSwitch is a Windows desktop appearance switcher. It changes between light a
 - **Matching wallpapers** for light and dark appearances, applied to every display with a choice of six fit modes.
 - **Manual switching** from the main window, system tray, or `Ctrl+Alt+Shift+D`. Fixed-hours and sunrise/sunset schedules resume at the next switching time.
 - **Desktop integration** with launch at sign-in, close or minimize to tray, and command-line controls.
+- **In-app updates** that check GitHub Releases in the background at startup or on demand from About & updates. Installed and portable builds get the matching download, verified by SHA256 before you confirm the install or replacement.
 - **Native interface** built with WinUI 3 and Fluent Design, adapting to light and dark themes and using Mica on Windows 11.
 
 ## Installation
@@ -38,6 +39,8 @@ LightSwitch requires **Windows 10 1809 or later, or Windows 11, x64**. Releases 
 The installer selects launch at sign-in by default on a fresh install and preserves the existing setting during upgrades. The installer is unsigned and may trigger a Windows SmartScreen prompt; SHA256 files are available with the release.
 
 For a portable installation, download `LightSwitch-<version>-portable.zip`, extract it, and run `LightSwitch.exe`. See [installer/README.md](installer/README.md) for silent installation, uninstallation, and installer builds.
+
+Both installed and portable builds can check for updates in the app. The downloaded file is verified against the SHA256 published with the release, and you then confirm whether to launch the installer or replace the files. LightSwitch never installs silently or restarts on its own.
 
 The application interface is currently in Simplified Chinese.
 
@@ -69,6 +72,17 @@ By default, closing or minimizing the window hides LightSwitch in the system tra
 
 The global shortcut is **`Ctrl+Alt+Shift+D`** and can be disabled under General (通用). Launch at sign-in, close to tray, and minimize to tray can be adjusted there as well.
 
+### Check for updates
+
+About & updates (关于与更新), below General, shows the current version and installation mode and provides a Check for updates (检查更新) button. The app checks once in the background at startup; turn off the 启动时自动检查更新 toggle to disable it. Automatic checks run at most once every 24 hours, while a manual check always starts immediately.
+
+When a new version is available, the panel shows its version, release notes, and Download update (下载更新) / Remind me later (稍后提醒). Only the latest stable GitHub release is considered; drafts and pre-releases are ignored.
+
+- **Installed build**: downloads `LightSwitch-<version>-setup.exe` and verifies the SHA256 published with the release. Run installer (运行安装程序) then starts the setup wizard; upgrades keep the existing installer flow and preserve the configuration under `%LOCALAPPDATA%\LightSwitch`.
+- **Portable build**: downloads `LightSwitch-<version>-portable.zip` and, after verification, opens the download folder. Exit LightSwitch first, then extract the ZIP and replace the program files manually. The app never overwrites a running executable.
+
+Network failures, timeouts, GitHub API rate limits, and checksum failures are shown as non-blocking messages; scheduling continues normally. The last check time and any postponed version are stored in `%LOCALAPPDATA%\LightSwitch\update-state.json`.
+
 ### Command line
 
 Run these commands from the directory containing `LightSwitch.exe`:
@@ -92,9 +106,11 @@ Settings are saved automatically when changed in the interface. The data files a
 ```text
 %LOCALAPPDATA%\LightSwitch\config.json
 %LOCALAPPDATA%\LightSwitch\LightSwitch.log
+%LOCALAPPDATA%\LightSwitch\update-state.json
+%LOCALAPPDATA%\LightSwitch\updates\
 ```
 
-Use [config.example.json](config.example.json) as a reference. Restart the app after editing the configuration file directly. The log rotates at 512 KB.
+Use [config.example.json](config.example.json) as a reference. Restart the app after editing the configuration file directly. The log rotates at 512 KB. `update-state.json` stores the last check time and any postponed version, and the `updates` folder holds downloaded update files that passed verification.
 
 | Setting | Description |
 | --- | --- |
@@ -109,6 +125,7 @@ Use [config.example.json](config.example.json) as a reference. Restart the app a
 | `runAtStartup` | Launch at sign-in. |
 | `minimizeToTray` / `closeToTray` | Hide to the tray when minimizing or closing the window. |
 | `hotkeyEnabled` | Enable the global shortcut. |
+| `checkForUpdates` | Check for updates in the background at startup; defaults to `true`. Manual checks are always available. |
 
 When upgrading from v1, the app attempts to import an old `config.json` from the executable directory if no configuration exists at the new location. Uninstallation keeps user settings and logs by default; the uninstall wizard offers an option to remove them.
 
@@ -118,6 +135,7 @@ When upgrading from v1, the app attempts to import an old `config.json` from the
 - **Wallpaper**: Check that wallpaper switching is enabled and the image paths still exist. Application results and errors are recorded in the log.
 - **Launch at sign-in**: After moving the executable, turn the option off and on under General (通用) to update its path.
 - **Global shortcut**: `RegisterHotKey failed` in the log indicates registration failed; check whether another app is using the combination.
+- **Update checks**: automatic checks run at most once every 24 hours; a manual check runs immediately. Unreachable GitHub endpoints or API rate limits are reported under About & updates and logged. A failed SHA256 check deletes the downloaded file, and you can retry later.
 
 ## Resource usage
 
@@ -150,7 +168,7 @@ The self-contained build is written to `artifacts\LightSwitch-win-x64\` by defau
 
 ```text
 src/LightSwitch.App/       WinUI 3 interface, tray, and command line
-src/LightSwitch.Core/      Scheduling, theme, wallpaper, and settings logic
+src/LightSwitch.Core/      Scheduling, theme, wallpaper, settings, and update-check logic
 tests/LightSwitch.Tests/   Core logic tests
 installer/                 Windows installer
 legacy/                    Archived v1 C++ version

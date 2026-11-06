@@ -25,6 +25,7 @@ LightSwitch 是一款 Windows 桌面外观切换工具。它可以按固定时�
 - **壁纸联动**：为浅色和深色各设置一张壁纸，切换外观时应用到所有显示器，支持六种填充方式。
 - **手动切换**：通过主界面、系统托盘或 `Ctrl+Alt+Shift+D` 立即切换；固定时间和日出日落模式会在下一个切换时间恢复自动调度。
 - **桌面集成**：支持开机启动、关闭或最小化到托盘，以及命令行控制。
+- **应用内更新**：启动时后台检查 GitHub Releases，也可在「关于与更新」中手动检查；安装版与便携版分别提供对应下载，SHA256 校验通过后由用户确认安装或替换。
 - **原生界面**：使用 WinUI 3 和 Fluent Design，适配系统深浅色；Windows 11 使用 Mica 背景。
 
 ## 安装
@@ -38,6 +39,8 @@ LightSwitch 是一款 Windows 桌面外观切换工具。它可以按固定时�
 安装向导在首次安装时默认勾选开机启动，升级时保留现有选择。安装包尚未签名，Windows SmartScreen 可能显示提示；Release 同时提供 SHA256 校验文件。
 
 也可以下载 `LightSwitch-<版本>-portable.zip`，解压后运行 `LightSwitch.exe`。静默安装、卸载及安装器构建说明见 [installer/README.md](installer/README.md)。
+
+安装版和便携版都可以在应用内检查更新。更新下载完成后会先校验 Release 提供的 SHA256，再由你确认启动安装向导或手动替换文件，不会静默安装或重启应用。
 
 ## 使用
 
@@ -67,6 +70,17 @@ LightSwitch 是一款 Windows 桌面外观切换工具。它可以按固定时�
 
 全局快捷键为 **`Ctrl+Alt+Shift+D`**，可在「通用」中关闭。开机启动、关闭到托盘和最小化到托盘也可在此调整。
 
+### 检查更新
+
+「通用」下方的「关于与更新」显示当前版本和安装方式，并提供「检查更新」按钮。启动时默认在后台检查一次，可通过「启动时自动检查更新」关闭；自动检查至少间隔 24 小时，手动检查不受此限制。
+
+发现新版本后，面板会显示版本号、Release Notes 以及「下载更新」「稍后提醒」。更新只使用 GitHub Releases 中最新的稳定版本，草稿和预发布版本会被忽略。
+
+- **安装版**：下载 `LightSwitch-<版本>-setup.exe`，校验 Release 提供的 SHA256 后，由你点击「运行安装程序」启动安装向导；升级沿用现有安装流程，并保留 `%LOCALAPPDATA%\LightSwitch` 中的配置。
+- **便携版**：下载 `LightSwitch-<版本>-portable.zip`，校验后打开下载目录。请先退出 LightSwitch，再解压并手动替换程序文件；应用不会覆盖正在运行的可执行文件。
+
+断网、超时、GitHub API 限流或校验失败时，界面会显示提示并继续正常调度，不会自动安装或重启。检查记录和推迟的版本保存在 `%LOCALAPPDATA%\LightSwitch\update-state.json`。
+
 ### 命令行
 
 在 `LightSwitch.exe` 所在目录运行：
@@ -90,9 +104,11 @@ LightSwitch 是一款 Windows 桌面外观切换工具。它可以按固定时�
 ```text
 %LOCALAPPDATA%\LightSwitch\config.json
 %LOCALAPPDATA%\LightSwitch\LightSwitch.log
+%LOCALAPPDATA%\LightSwitch\update-state.json
+%LOCALAPPDATA%\LightSwitch\updates\
 ```
 
-可参考 [config.example.json](config.example.json) 编辑配置；手动修改文件后需要重启应用。日志达到 512 KB 时会轮转。
+可参考 [config.example.json](config.example.json) 编辑配置；手动修改文件后需要重启应用。日志达到 512 KB 时会轮转。`update-state.json` 保存最近检查时间和推迟提醒的版本，`updates` 目录存放下载并通过校验的更新文件。
 
 | 配置项 | 说明 |
 | --- | --- |
@@ -107,6 +123,7 @@ LightSwitch 是一款 Windows 桌面外观切换工具。它可以按固定时�
 | `runAtStartup` | 开机启动。 |
 | `minimizeToTray` / `closeToTray` | 最小化或关闭窗口时隐藏到托盘。 |
 | `hotkeyEnabled` | 启用全局快捷键。 |
+| `checkForUpdates` | 启动时在后台检查更新，默认为 `true`；手动检查不受此开关限制。 |
 
 从 v1 升级时，如果新位置没有配置文件，应用会尝试导入程序目录中的旧 `config.json`。卸载默认保留用户配置和日志，可在卸载向导中选择清除。
 
@@ -116,6 +133,7 @@ LightSwitch 是一款 Windows 桌面外观切换工具。它可以按固定时�
 - **壁纸**：确认壁纸联动已启用、图片路径仍然有效；应用结果和错误会写入日志。
 - **开机启动**：移动程序后，在「通用」中关闭再启用开机启动，以更新程序路径。
 - **全局快捷键**：日志中的 `RegisterHotKey failed` 表示注册失败，可检查其他程序是否占用该组合键。
+- **检查更新**：自动检查至少间隔 24 小时，手动检查可立即发起。GitHub 不可达或 API 限流时会在「关于与更新」中提示，详细原因写入日志；SHA256 校验失败时下载文件会被删除，可稍后重试。
 
 ## 运行参考
 
@@ -148,7 +166,7 @@ cd LightSwitch-Windows
 
 ```text
 src/LightSwitch.App/       WinUI 3 界面、托盘与命令行
-src/LightSwitch.Core/      调度、主题、壁纸与配置逻辑
+src/LightSwitch.Core/      调度、主题、壁纸、配置与更新检查逻辑
 tests/LightSwitch.Tests/   核心逻辑测试
 installer/                 Windows 安装包
 legacy/                    v1 C++ 版本归档

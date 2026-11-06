@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.IO;
 using LightSwitch.Core;
+using LightSwitch.Core.Updates;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
@@ -22,11 +23,16 @@ public sealed class AppHost
     private readonly NightLightWatcher _nightLightWatcher;
     private readonly DispatcherQueueTimer _timer;
     private readonly DispatcherQueueTimer _systemEventDebounce;
+    private readonly UpdateService _updateService;
+    private readonly CancellationTokenSource _updateCancellation = new();
+    private readonly SemaphoreSlim _updateGate = new(1, 1);
     private readonly bool _startHidden;
 
     private TrayHost? _tray;
     private MainWindow? _window;
     private bool _exiting;
+
+    public const string ReleasesPage = "https://github.com/realhenrylan/LightSwitch-Windows/releases";
 
     public AppHost(string[] args)
     {
@@ -44,6 +50,18 @@ public sealed class AppHost
         _nightLightService = new NightLightService();
         _startupService = new StartupService();
         Engine = new AppearanceEngine(Settings, _themeService, _nightLightService, _wallpaperService);
+
+        var assemblyVersion = typeof(AppHost).Assembly.GetName().Version ?? new Version(0, 0, 0);
+        CurrentVersion = SemanticVersion.Parse(
+            $"{assemblyVersion.Major}.{assemblyVersion.Minor}.{Math.Max(0, assemblyVersion.Build)}");
+        InstallationMode = InstallationModeDetector.Detect(AppPaths.ExecutablePath);
+        _updateService = new UpdateService(
+            CurrentVersion,
+            InstallationMode,
+            new UpdateStateStore(),
+            new GitHubReleaseClient(),
+            new UpdateDownloader(),
+            AppPaths.UpdatesDirectory);
 
         _nightLightWatcher = new NightLightWatcher();
         _timer = _dispatcher.CreateTimer();
@@ -68,7 +86,16 @@ public sealed class AppHost
 
     public string DataDirectory => AppPaths.DataDirectory;
 
+    public SemanticVersion CurrentVersion { get; }
+
+    public InstallationMode InstallationMode { get; }
+
+    public UpdateCheckResult? LastUpdateCheck { get; private set; }
+
     public event Action<EngineState>? StateUpdated;
+
+    /// <summary>Raised after the automatic startup check finishes, marshalled to the UI thread.</summary>
+    public event Action<UpdateCheckResult>? BackgroundUpdateChecked;
 
     public void Start()
     {
@@ -105,6 +132,11 @@ public sealed class AppHost
         if (!_startHidden)
         {
             ShowMainWindow();
+        }
+
+        if (Settings.CheckForUpdates)
+        {
+            _ = RunBackgroundUpdateCheckAsync();
         }
     }
 
@@ -174,6 +206,85 @@ public sealed class AppHost
         }
     }
 
+    public async Task<UpdateCheckResult> CheckForUpdatesAsync(bool manual, CancellationToken cancellationToken)
+    {
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken,
+            _updateCancellation.Token);
+        await _updateGate.WaitAsync(linked.Token).ConfigureAwait(false);
+        try
+        {
+            var result = await _updateService.CheckAsync(manual, linked.Token).ConfigureAwait(false);
+            LastUpdateCheck = result;
+
+            if (!manual)
+            {
+                NotifyBackgroundUpdate(result);
+            }
+
+            return result;
+        }
+        finally
+        {
+            _updateGate.Release();
+        }
+    }
+
+    public bool IsUpdatePostponed(ReleaseInfo release) => _updateService.IsPostponed(release.Version);
+
+    public void PostponeUpdate(ReleaseInfo release) => _updateService.Postpone(release.Version);
+
+    public Task<UpdateDownloadResult> DownloadUpdateAsync(ReleaseInfo release, IProgress<double>? progress,
+        CancellationToken cancellationToken) =>
+        _updateService.DownloadAsync(release, progress, cancellationToken);
+
+    public void OpenDownloadedFile(string path)
+    {
+        try
+        {
+            if (File.Exists(path))
+            {
+                Process.Start(new ProcessStartInfo("explorer.exe", $"/select,\"{path}\"")
+                {
+                    UseShellExecute = true,
+                });
+                return;
+            }
+
+            var directory = Path.GetDirectoryName(path);
+            if (!string.IsNullOrEmpty(directory) && Directory.Exists(directory))
+            {
+                Process.Start(new ProcessStartInfo("explorer.exe", $"\"{directory}\"")
+                {
+                    UseShellExecute = true,
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"Could not open the downloaded update: {ex.Message}");
+        }
+    }
+
+    /// <summary>Starts the verified installer only after the user explicitly confirmed it.</summary>
+    public string? RunDownloadedInstaller(string path)
+    {
+        if (!File.Exists(path))
+        {
+            return "安装程序不存在，请重新下载更新。";
+        }
+
+        try
+        {
+            Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
+            return null;
+        }
+        catch (Exception ex)
+        {
+            Log.Error("Could not start the downloaded installer", ex);
+            return $"无法启动安装程序：{ex.Message}";
+        }
+    }
+
     public void ToggleAutoSchedule()
     {
         var settings = Settings.Clone();
@@ -215,6 +326,15 @@ public sealed class AppHost
 
         try
         {
+            _updateCancellation.Cancel();
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"Could not cancel the update task: {ex.Message}");
+        }
+
+        try
+        {
             _timer.Stop();
             _systemEventDebounce.Stop();
             Engine.StateChanged -= OnStateChanged;
@@ -246,6 +366,51 @@ public sealed class AppHost
         }
 
         Application.Current.Exit();
+    }
+
+    private async Task RunBackgroundUpdateCheckAsync()
+    {
+        try
+        {
+            await CheckForUpdatesAsync(manual: false, _updateCancellation.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            // The app is exiting.
+        }
+        catch (Exception ex)
+        {
+            Log.Error("Background update check failed", ex);
+        }
+    }
+
+    private void NotifyBackgroundUpdate(UpdateCheckResult result)
+    {
+        void Notify()
+        {
+            if (_exiting)
+            {
+                return;
+            }
+
+            try
+            {
+                BackgroundUpdateChecked?.Invoke(result);
+            }
+            catch (Exception ex)
+            {
+                Log.Error("An update UI handler failed", ex);
+            }
+        }
+
+        if (_dispatcher.HasThreadAccess)
+        {
+            Notify();
+        }
+        else
+        {
+            _dispatcher.TryEnqueue(Notify);
+        }
     }
 
     private void OnTimerTick(DispatcherQueueTimer sender, object args)

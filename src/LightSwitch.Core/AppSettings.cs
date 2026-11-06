@@ -67,6 +67,9 @@ public sealed class AppSettings
     [JsonPropertyName("hotkeyEnabled")]
     public bool HotkeyEnabled { get; set; } = true;
 
+    [JsonPropertyName("checkForUpdates")]
+    public bool CheckForUpdates { get; set; } = true;
+
     [JsonIgnore]
     public bool HasLightWallpaper => !string.IsNullOrWhiteSpace(LightWallpaper);
 
@@ -92,6 +95,7 @@ public sealed class AppSettings
         MinimizeToTray = MinimizeToTray,
         CloseToTray = CloseToTray,
         HotkeyEnabled = HotkeyEnabled,
+        CheckForUpdates = CheckForUpdates,
     };
 
     /// <summary>Clamps out-of-range values that may come from a hand-edited file.</summary>

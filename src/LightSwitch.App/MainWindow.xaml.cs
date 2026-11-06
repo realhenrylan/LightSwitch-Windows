@@ -1,6 +1,8 @@
+using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using LightSwitch.Core;
+using LightSwitch.Core.Updates;
 using Microsoft.UI;
 using Microsoft.UI.Composition.SystemBackdrops;
 using Microsoft.UI.Dispatching;
@@ -22,6 +24,11 @@ public sealed partial class MainWindow : Window
     private bool _initializing;
     private string? _lastError;
     private DispatcherQueueTimer? _commitTimer;
+    private ReleaseInfo? _pendingUpdate;
+    private string? _downloadedFilePath;
+    private CancellationTokenSource? _downloadCancellation;
+    private bool _checkingUpdate;
+    private bool _downloadingUpdate;
 
     public MainWindow(AppHost host)
     {
@@ -32,9 +39,12 @@ public sealed partial class MainWindow : Window
         InitializeComponent();
         ConfigureWindow();
         LoadSettingsIntoUi();
-        UpdateState(_host.Engine.State);
 
         _host.StateUpdated += OnHostStateUpdated;
+        _host.BackgroundUpdateChecked += OnBackgroundUpdateChecked;
+        RestoreUpdateState();
+        UpdateState(_host.Engine.State);
+
         Closed += OnClosed;
         Activated += OnActivated;
     }
@@ -135,6 +145,7 @@ public sealed partial class MainWindow : Window
             CloseToTrayToggle.IsOn = _edit.CloseToTray;
             MinimizeToTrayToggle.IsOn = _edit.MinimizeToTray;
             HotkeyToggle.IsOn = _edit.HotkeyEnabled;
+            CheckForUpdatesToggle.IsOn = _edit.CheckForUpdates;
 
             LightWallpaperPath.Text = string.IsNullOrWhiteSpace(_edit.LightWallpaper) ? "未选择" : _edit.LightWallpaper;
             DarkWallpaperPath.Text = string.IsNullOrWhiteSpace(_edit.DarkWallpaper) ? "未选择" : _edit.DarkWallpaper;
@@ -142,7 +153,11 @@ public sealed partial class MainWindow : Window
             DarkPreview.Source = LoadPreview(_edit.DarkWallpaper);
 
             DataDirectoryText.Text = _host.DataDirectory;
-            VersionText.Text = $"LightSwitch {typeof(AppHost).Assembly.GetName().Version?.ToString(3)} · WinUI 3 · Windows App SDK";
+            AboutVersionText.Text = $"LightSwitch {_host.CurrentVersion}";
+            AboutModeText.Text = _host.InstallationMode == InstallationMode.Installed
+                ? "安装版 · 使用安装程序升级并保留配置"
+                : "便携版 · 使用便携 ZIP 手动替换升级";
+            VersionText.Text = $"LightSwitch {_host.CurrentVersion} · WinUI 3 · Windows App SDK";
 
             UpdateEnabledStates();
         }
@@ -413,6 +428,20 @@ public sealed partial class MainWindow : Window
         // Persist any debounced edit before the window goes away.
         FlushPendingCommit();
         _host.StateUpdated -= OnHostStateUpdated;
+        _host.BackgroundUpdateChecked -= OnBackgroundUpdateChecked;
+
+        // Cancel an in-flight download instead of disposing its source: the download
+        // may still be registering the token, and a canceled token is harmless here.
+        try
+        {
+            _downloadCancellation?.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+            // Already disposed; nothing left to cancel.
+        }
+
+        _downloadCancellation = null;
     }
 
     private void OnModeChanged(object sender, SelectionChangedEventArgs e)
@@ -651,6 +680,332 @@ public sealed partial class MainWindow : Window
     {
         FlushPendingCommit();
         _host.RestoreAutomatic();
+    }
+
+    private void RestoreUpdateState()
+    {
+        if (_host.LastUpdateCheck is { } result)
+        {
+            RenderUpdateCheckResult(result, manual: false);
+        }
+    }
+
+    private async void OnCheckUpdateClick(object sender, RoutedEventArgs e)
+    {
+        if (_checkingUpdate)
+        {
+            return;
+        }
+
+        _checkingUpdate = true;
+        CheckUpdateButton.IsEnabled = false;
+        SetUpdateStatus("正在检查更新…");
+        try
+        {
+            var result = await _host.CheckForUpdatesAsync(manual: true, CancellationToken.None);
+            RenderUpdateCheckResult(result, manual: true);
+        }
+        catch (Exception ex)
+        {
+            Log.Error("Update check failed", ex);
+            SetUpdateStatus($"检查更新失败：{ex.Message}");
+            ShowMessage("检查更新失败", ex.Message, InfoBarSeverity.Warning);
+        }
+        finally
+        {
+            _checkingUpdate = false;
+            CheckUpdateButton.IsEnabled = !_downloadingUpdate;
+        }
+    }
+
+    private void OnBackgroundUpdateChecked(UpdateCheckResult result)
+    {
+        if (result.Status == UpdateCheckStatus.UpdateAvailable &&
+            result.Release is { } release &&
+            !_host.IsUpdatePostponed(release))
+        {
+            ShowUpdateAvailable(release);
+        }
+        else if (result.Status is UpdateCheckStatus.NetworkError or UpdateCheckStatus.Timeout
+                 or UpdateCheckStatus.RateLimited or UpdateCheckStatus.HttpError
+                 or UpdateCheckStatus.InvalidResponse)
+        {
+            SetUpdateStatus($"自动检查更新失败：{result.Message}");
+        }
+    }
+
+    private void RenderUpdateCheckResult(UpdateCheckResult result, bool manual)
+    {
+        switch (result.Status)
+        {
+            case UpdateCheckStatus.UpdateAvailable when result.Release is { } release:
+                if (_host.IsUpdatePostponed(release))
+                {
+                    HideUpdatePanel();
+                    if (manual)
+                    {
+                        SetUpdateStatus($"已推迟版本 {release.Version} 的提醒，可稍后再次检查。");
+                    }
+                    return;
+                }
+
+                ShowUpdateAvailable(release);
+                return;
+
+            case UpdateCheckStatus.UpToDate:
+                HideUpdatePanel();
+                if (manual)
+                {
+                    SetUpdateStatus($"已是最新版本（v{_host.CurrentVersion}）。");
+                }
+                return;
+
+            case UpdateCheckStatus.NoStableRelease:
+                HideUpdatePanel();
+                if (manual)
+                {
+                    SetUpdateStatus("GitHub 上暂无稳定版本。");
+                }
+                return;
+
+            case UpdateCheckStatus.Throttled:
+                if (manual)
+                {
+                    SetUpdateStatus("刚刚已经检查过更新，请稍后再试。");
+                }
+                return;
+
+            case UpdateCheckStatus.Canceled:
+                if (manual)
+                {
+                    SetUpdateStatus("已取消检查更新。");
+                }
+                return;
+
+            default:
+                HideUpdatePanel();
+                if (manual)
+                {
+                    SetUpdateStatus($"检查更新失败：{result.Message}");
+                    ShowMessage("检查更新失败", result.Message, InfoBarSeverity.Warning);
+                }
+                else
+                {
+                    SetUpdateStatus($"自动检查更新失败：{result.Message}");
+                }
+                return;
+        }
+    }
+
+    private void ShowUpdateAvailable(ReleaseInfo release)
+    {
+        _pendingUpdate = release;
+        UpdateTitleText.Text = $"发现新版本 {release.Version}";
+        UpdateNotesText.Text = string.IsNullOrWhiteSpace(release.Notes)
+            ? "该版本未提供更新说明。"
+            : release.Notes.Trim();
+
+        UpdateProgressBar.Value = 0;
+        UpdateProgressBar.Visibility = Visibility.Collapsed;
+        UpdateProgressText.Visibility = Visibility.Collapsed;
+        UpdateGuidanceText.Visibility = Visibility.Collapsed;
+        OpenDownloadButton.Visibility = Visibility.Collapsed;
+        InstallUpdateButton.Visibility = Visibility.Collapsed;
+        DownloadUpdateButton.Visibility = Visibility.Visible;
+        DownloadUpdateButton.IsEnabled = true;
+        PostponeUpdateButton.IsEnabled = true;
+        UpdatePanel.Visibility = Visibility.Visible;
+        SetUpdateStatus($"当前版本 v{_host.CurrentVersion}，新版本 v{release.Version} 可用。");
+    }
+
+    private void HideUpdatePanel()
+    {
+        UpdatePanel.Visibility = Visibility.Collapsed;
+        _pendingUpdate = null;
+    }
+
+    private void SetUpdateStatus(string text)
+    {
+        UpdateStatusText.Text = text;
+        UpdateStatusText.Visibility = Visibility.Visible;
+    }
+
+    private void OnPostponeUpdateClick(object sender, RoutedEventArgs e)
+    {
+        if (_pendingUpdate is not { } release)
+        {
+            return;
+        }
+
+        _host.PostponeUpdate(release);
+        HideUpdatePanel();
+        SetUpdateStatus($"已推迟版本 {release.Version} 的提醒，可稍后再次检查。");
+    }
+
+    private async void OnDownloadUpdateClick(object sender, RoutedEventArgs e)
+    {
+        if (_pendingUpdate is not { } release || _downloadingUpdate)
+        {
+            return;
+        }
+
+        _downloadingUpdate = true;
+        _downloadCancellation ??= new CancellationTokenSource();
+        DownloadUpdateButton.IsEnabled = false;
+        PostponeUpdateButton.IsEnabled = false;
+        CheckUpdateButton.IsEnabled = false;
+        UpdateProgressBar.Value = 0;
+        UpdateProgressBar.Visibility = Visibility.Visible;
+        UpdateProgressText.Text = "正在下载更新…";
+        UpdateProgressText.Visibility = Visibility.Visible;
+        UpdateGuidanceText.Visibility = Visibility.Collapsed;
+        InstallUpdateButton.Visibility = Visibility.Collapsed;
+        OpenDownloadButton.Visibility = Visibility.Collapsed;
+
+        try
+        {
+            var progress = new Progress<double>(value =>
+            {
+                var fraction = double.IsNaN(value) ? 0 : Math.Clamp(value, 0, 1);
+                UpdateProgressBar.Value = fraction;
+                UpdateProgressText.Text = $"正在下载更新… {fraction:P0}";
+            });
+
+            var result = await _host.DownloadUpdateAsync(release, progress, _downloadCancellation.Token);
+            if (result.Success && result.FilePath is { } path)
+            {
+                _downloadedFilePath = path;
+                UpdateProgressBar.Value = 1;
+                UpdateProgressText.Text = "下载完成，SHA256 校验通过。";
+                DownloadUpdateButton.Visibility = Visibility.Collapsed;
+                PostponeUpdateButton.IsEnabled = true;
+                OpenDownloadButton.Visibility = Visibility.Visible;
+                ShowDownloadGuidance(release);
+                SetUpdateStatus($"版本 {release.Version} 已下载并通过校验。");
+            }
+            else
+            {
+                ShowDownloadFailure(result);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            UpdateProgressText.Text = "下载已取消。";
+        }
+        catch (Exception ex)
+        {
+            Log.Error("Update download failed", ex);
+            ShowMessage("下载更新失败", ex.Message, InfoBarSeverity.Error);
+            UpdateProgressText.Text = "下载失败。";
+        }
+        finally
+        {
+            _downloadingUpdate = false;
+            CheckUpdateButton.IsEnabled = true;
+            DownloadUpdateButton.IsEnabled = _pendingUpdate is not null;
+            PostponeUpdateButton.IsEnabled = _pendingUpdate is not null;
+        }
+    }
+
+    private void ShowDownloadGuidance(ReleaseInfo release)
+    {
+        if (_host.InstallationMode == InstallationMode.Installed)
+        {
+            InstallUpdateButton.Visibility = Visibility.Visible;
+            UpdateGuidanceText.Text =
+                "点击「运行安装程序」后将启动安装向导，LightSwitch 会先退出；升级会保留当前配置。";
+        }
+        else
+        {
+            InstallUpdateButton.Visibility = Visibility.Collapsed;
+            UpdateGuidanceText.Text =
+                $"便携版更新：请先退出 LightSwitch，再将版本 {release.Version} 的 ZIP 解压并手动替换当前程序文件。不要直接覆盖正在运行的程序。";
+        }
+
+        UpdateGuidanceText.Visibility = Visibility.Visible;
+    }
+
+    private void ShowDownloadFailure(UpdateDownloadResult result)
+    {
+        var message = result.Status switch
+        {
+            UpdateDownloadStatus.MissingAsset or UpdateDownloadStatus.MissingChecksum =>
+                "该版本缺少对应的安装包或 SHA256 文件，请前往 GitHub 发布页面手动下载。",
+            UpdateDownloadStatus.ChecksumMismatch =>
+                "SHA256 校验失败，已删除下载文件。请重试，或前往 GitHub 发布页面手动下载。",
+            UpdateDownloadStatus.TooLarge => "安装包超出允许的大小，已停止下载。",
+            UpdateDownloadStatus.RateLimited => "GitHub 暂时限制了下载请求，请稍后再试。",
+            _ => result.Message,
+        };
+
+        UpdateProgressText.Text = message;
+        UpdateProgressText.Visibility = Visibility.Visible;
+        SetUpdateStatus(message);
+        ShowMessage("下载更新失败", message, InfoBarSeverity.Warning);
+    }
+
+    private void OnOpenDownloadFolderClick(object sender, RoutedEventArgs e)
+    {
+        if (_downloadedFilePath is not null)
+        {
+            _host.OpenDownloadedFile(_downloadedFilePath);
+        }
+    }
+
+    private async void OnInstallUpdateClick(object sender, RoutedEventArgs e)
+    {
+        var path = _downloadedFilePath;
+        if (path is null)
+        {
+            return;
+        }
+
+        var dialog = new ContentDialog
+        {
+            Title = "运行安装程序",
+            Content = "安装向导启动后 LightSwitch 会退出。是否继续？",
+            PrimaryButtonText = "运行安装程序",
+            CloseButtonText = "取消",
+            DefaultButton = ContentDialogButton.Close,
+            XamlRoot = RootGrid.XamlRoot,
+        };
+
+        if (await dialog.ShowAsync() != ContentDialogResult.Primary)
+        {
+            return;
+        }
+
+        var error = _host.RunDownloadedInstaller(path);
+        if (error is not null)
+        {
+            ShowMessage("无法启动安装程序", error, InfoBarSeverity.Error);
+            return;
+        }
+
+        SetUpdateStatus("安装程序已启动。");
+    }
+
+    private void OnCheckForUpdatesToggled(object sender, RoutedEventArgs e)
+    {
+        if (_initializing)
+        {
+            return;
+        }
+
+        _edit.CheckForUpdates = CheckForUpdatesToggle.IsOn;
+        Commit();
+    }
+
+    private void OnOpenReleasesPageClick(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo(AppHost.ReleasesPage) { UseShellExecute = true });
+        }
+        catch (Exception ex)
+        {
+            ShowMessage("无法打开浏览器", ex.Message, InfoBarSeverity.Warning);
+        }
     }
 
     private void OnOpenDataFolderClick(object sender, RoutedEventArgs e) => _host.OpenDataFolder();

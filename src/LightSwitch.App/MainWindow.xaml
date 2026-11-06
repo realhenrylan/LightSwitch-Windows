@@ -276,6 +276,69 @@
                     </StackPanel>
                 </Border>
 
+                <!-- About & updates -->
+                <Border Style="{StaticResource CardBorderStyle}">
+                    <StackPanel Spacing="12">
+                        <TextBlock Text="关于与更新" Style="{StaticResource SectionTitleStyle}" />
+
+                        <Grid ColumnSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Spacing="2" VerticalAlignment="Center">
+                                <TextBlock x:Name="AboutVersionText" Style="{StaticResource SettingLabelStyle}" />
+                                <TextBlock x:Name="AboutModeText" Style="{StaticResource SettingDescriptionStyle}" />
+                            </StackPanel>
+                            <Button x:Name="CheckUpdateButton" Grid.Column="1" Content="检查更新"
+                                    Click="OnCheckUpdateClick" VerticalAlignment="Center" />
+                        </Grid>
+
+                        <TextBlock x:Name="UpdateStatusText" Visibility="Collapsed"
+                                   Style="{StaticResource SettingDescriptionStyle}" />
+
+                        <ToggleSwitch x:Name="CheckForUpdatesToggle" Header="启动时自动检查更新"
+                                      OnContent="启用" OffContent="关闭" Toggled="OnCheckForUpdatesToggled" />
+
+                        <Border x:Name="UpdatePanel" Visibility="Collapsed" Padding="14"
+                                Background="{ThemeResource ControlFillColorDefaultBrush}"
+                                BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
+                                BorderThickness="1" CornerRadius="6">
+                            <StackPanel Spacing="10">
+                                <TextBlock x:Name="UpdateTitleText"
+                                           Style="{StaticResource BodyStrongTextBlockStyle}" />
+                                <ScrollViewer MaxHeight="180" VerticalScrollBarVisibility="Auto">
+                                    <TextBlock x:Name="UpdateNotesText" TextWrapping="Wrap"
+                                               Style="{StaticResource SettingDescriptionStyle}" />
+                                </ScrollViewer>
+                                <ProgressBar x:Name="UpdateProgressBar" Visibility="Collapsed"
+                                             Minimum="0" Maximum="1" />
+                                <TextBlock x:Name="UpdateProgressText" Visibility="Collapsed"
+                                           Style="{StaticResource SettingDescriptionStyle}" />
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <Button x:Name="DownloadUpdateButton" Content="下载更新"
+                                            Style="{StaticResource AccentButtonStyle}"
+                                            Click="OnDownloadUpdateClick" />
+                                    <Button x:Name="PostponeUpdateButton" Content="稍后提醒"
+                                            Click="OnPostponeUpdateClick" />
+                                    <Button x:Name="OpenDownloadButton" Content="打开所在文件夹"
+                                            Visibility="Collapsed" Click="OnOpenDownloadFolderClick" />
+                                    <Button x:Name="InstallUpdateButton" Content="运行安装程序"
+                                            Visibility="Collapsed"
+                                            Style="{StaticResource AccentButtonStyle}"
+                                            Click="OnInstallUpdateClick" />
+                                </StackPanel>
+                                <TextBlock x:Name="UpdateGuidanceText" Visibility="Collapsed"
+                                           TextWrapping="Wrap"
+                                           Style="{StaticResource SettingDescriptionStyle}" />
+                            </StackPanel>
+                        </Border>
+
+                        <HyperlinkButton Content="在 GitHub 上查看发布页面" Padding="0"
+                                         Click="OnOpenReleasesPageClick" />
+                    </StackPanel>
+                </Border>
+
                 <TextBlock x:Name="VersionText" HorizontalAlignment="Center" Margin="0,4,0,0"
                            Style="{StaticResource SettingDescriptionStyle}" />
             </StackPanel>

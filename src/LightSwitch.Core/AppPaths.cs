@@ -17,6 +17,12 @@ public static class AppPaths
     /// <summary>%LOCALAPPDATA%\LightSwitch\LightSwitch.log</summary>
     public static string LogPath => Path.Combine(DataDirectory, "LightSwitch.log");
 
+    /// <summary>%LOCALAPPDATA%\LightSwitch\update-state.json (last check time, postponed version).</summary>
+    public static string UpdateStatePath => Path.Combine(DataDirectory, "update-state.json");
+
+    /// <summary>%LOCALAPPDATA%\LightSwitch\updates (verified update packages).</summary>
+    public static string UpdatesDirectory => Path.Combine(DataDirectory, "updates");
+
     /// <summary>
     /// The old standalone build stored config.json next to the executable.
     /// It is imported once when no per-user configuration exists yet.

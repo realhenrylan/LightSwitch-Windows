@@ -15,5 +15,6 @@
   "runAtStartup": false,
   "minimizeToTray": true,
   "closeToTray": true,
-  "hotkeyEnabled": true
+  "hotkeyEnabled": true,
+  "checkForUpdates": true
 }
